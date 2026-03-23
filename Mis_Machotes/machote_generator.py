@@ -218,7 +218,7 @@ def seleccionar_articulos(df_disponibles, monto_objetivo):
     return df_resultado
 
 def generar_machote(df_seleccion, monto_objetivo, empresa, rfc, cuenta_mp):
-    if not os.path.exists(OUTPUT_DIR):
+if not os.path.exists(OUTPUT_DIR):
         os.makedirs(OUTPUT_DIR)
         
     fecha_str = datetime.now().strftime("%d %b %Y").upper()
@@ -764,3 +764,30 @@ def main():
     
 if __name__ == '__main__':
     main()
+
+
+def _replace_inventory_file(nuevo_path, path_inventario=PATH_INVENTARIO):
+    shutil = __import__("shutil")
+    if not os.path.exists(nuevo_path):
+        raise FileNotFoundError(f"No se encontró el archivo actualizado: {nuevo_path}")
+    shutil.move(nuevo_path, path_inventario)
+    return path_inventario
+
+
+def generar_machote_y_actualizar(df_seleccion, monto_objetivo, empresa, rfc, cuenta_mp):
+    ruta_machote, nombre_machote = generar_machote(df_seleccion, monto_objetivo, empresa, rfc, cuenta_mp)
+    nuevo_inventario_path = actualizar_inventario_base(df_seleccion, nombre_machote)
+    inventario_final = _replace_inventory_file(nuevo_inventario_path, PATH_INVENTARIO)
+    return ruta_machote, nombre_machote, inventario_final
+
+
+def cargar_inventario_y_reemplazar(ruta_pdf, path_inventario=PATH_INVENTARIO):
+    cargar_inventario(ruta_pdf, path_inventario)
+    path_salida = path_inventario.replace(".xlsx", "_CARGADO.xlsx")
+    return _replace_inventory_file(path_salida, path_inventario)
+
+
+def validar_xml_y_reemplazar(xml_dir, path_inventario=PATH_INVENTARIO):
+    actualizar_inventario_uuid(xml_dir, path_inventario)
+    path_salida = path_inventario.replace(".xlsx", "_UUID_ACTUALIZADO.xlsx")
+    return _replace_inventory_file(path_salida, path_inventario)
