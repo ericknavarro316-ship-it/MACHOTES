@@ -57,6 +57,72 @@ DEFAULT_CONFIG = {
 }
 
 
+class MultiSelectMenu(ctk.CTkButton):
+    def __init__(self, master, title="Seleccionar", values=None, command=None, **kwargs):
+        super().__init__(master, text=title, **kwargs)
+        self.values = values or []
+        self.command = command
+        self.variables = {}
+        self.dropdown = None
+        self._title = title
+        self.configure(command=self.toggle_dropdown)
+        self.set_values(self.values)
+
+    def set_values(self, values):
+        old_vars = self.variables
+        self.values = values
+        self.variables = {}
+        for val in values:
+            if val in old_vars:
+                self.variables[val] = old_vars[val]
+            else:
+                self.variables[val] = ctk.IntVar(value=1)
+        self.update_text()
+
+    def get(self):
+        return [val for val, var in self.variables.items() if var.get() == 1]
+
+    def update_text(self):
+        selected = len(self.get())
+        total = len(self.values)
+        if selected == total:
+            self.configure(text=f"{self._title} (Todos)")
+        elif selected == 0:
+            self.configure(text=f"{self._title} (Ninguno)")
+        else:
+            self.configure(text=f"{self._title} ({selected})")
+
+    def toggle_dropdown(self):
+        if self.dropdown is not None and self.dropdown.winfo_exists():
+            self.dropdown.destroy()
+            self.dropdown = None
+            self.update_text()
+            if self.command:
+                self.command()
+        else:
+            self.dropdown = ctk.CTkToplevel(self)
+            self.dropdown.overrideredirect(True)
+            self.dropdown.attributes('-topmost', True)
+            x = self.winfo_rootx()
+            y = self.winfo_rooty() + self.winfo_height()
+            self.dropdown.geometry(f"+str({x})+str({y})")
+            frame = ctk.CTkScrollableFrame(self.dropdown, fg_color=OOT_THEME["panel"], width=200, height=200, border_color=OOT_THEME["gold"], border_width=1)
+            frame.pack(fill="both", expand=True)
+            btn_frame = ctk.CTkFrame(frame, fg_color="transparent")
+            btn_frame.pack(fill="x", pady=5)
+            def select_all():
+                for var in self.variables.values(): var.set(1)
+            def deselect_all():
+                for var in self.variables.values(): var.set(0)
+            def close_dropdown():
+                self.toggle_dropdown()
+            ctk.CTkButton(btn_frame, text="Todo", width=50, height=24, command=select_all, fg_color=OOT_THEME["panel_alt"], hover_color=OOT_THEME["forest_hover"]).pack(side="left", padx=2)
+            ctk.CTkButton(btn_frame, text="Nada", width=50, height=24, command=deselect_all, fg_color=OOT_THEME["panel_alt"], hover_color=OOT_THEME["danger_hover"]).pack(side="left", padx=2)
+            ctk.CTkButton(btn_frame, text="Cerrar", width=50, height=24, command=close_dropdown, fg_color=OOT_THEME["gold"], text_color="#000", hover_color=OOT_THEME["gold_hover"]).pack(side="right", padx=2)
+            for val in self.values:
+                cb = ctk.CTkCheckBox(frame, text=val, variable=self.variables[val], onvalue=1, offvalue=0, fg_color=OOT_THEME["forest"], hover_color=OOT_THEME["forest_hover"], text_color=OOT_THEME["text"])
+                cb.pack(anchor="w", padx=10, pady=5)
+
 class RedirectText:
     def __init__(self, textbox):
         self.textbox = textbox
@@ -153,13 +219,20 @@ class DashboardView(BaseView):
     def __init__(self, master, app):
         super().__init__(master, app)
         self.create_header()
-        self.grid_rowconfigure(2, weight=1)
+        self.grid_rowconfigure(3, weight=1)
         self.metric_labels = {}
         self.chart_canvas = None
         self.summary_tree = None
 
+        controls = ctk.CTkFrame(self, fg_color="transparent")
+        controls.grid(row=1, column=0, sticky="ew", padx=18, pady=(0, 12))
+
+        self.filter_var = ctk.StringVar(value="Todos")
+        self.segment = ctk.CTkSegmentedButton(controls, values=["Todos", "Disponibles", "Usados", "XML"], variable=self.filter_var, command=lambda _: self.refresh(), selected_color=OOT_THEME["gold"], selected_hover_color=OOT_THEME["gold_hover"], unselected_color=OOT_THEME["panel_alt"], unselected_hover_color=OOT_THEME["panel"])
+        self.segment.pack(anchor="w")
+
         metrics = ctk.CTkFrame(self, fg_color="transparent")
-        metrics.grid(row=1, column=0, sticky="ew", padx=18)
+        metrics.grid(row=2, column=0, sticky="ew", padx=18)
         for idx in range(4):
             metrics.grid_columnconfigure(idx, weight=1)
 
@@ -169,7 +242,7 @@ class DashboardView(BaseView):
         self._metric_card(metrics, 3, "Sucursales", "0", "branches")
 
         content = ctk.CTkFrame(self, fg_color="transparent")
-        content.grid(row=2, column=0, sticky="nsew", padx=18, pady=(12, 18))
+        content.grid(row=3, column=0, sticky="nsew", padx=18, pady=(12, 18))
         content.grid_columnconfigure((0, 1), weight=1)
         content.grid_rowconfigure(0, weight=1)
 
@@ -185,11 +258,11 @@ class DashboardView(BaseView):
         summary_card.grid(row=0, column=1, sticky="nsew", padx=(9, 0))
         summary_card.grid_rowconfigure(1, weight=1)
         summary_card.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(summary_card, text="Reliquias Más Valiosas", font=ctk.CTkFont(size=18, weight="bold"), text_color=OOT_THEME["gold"]).grid(row=0, column=0, sticky="w", padx=18, pady=(14, 6))
+        ctk.CTkLabel(summary_card, text="Resumen por Sucursal", font=ctk.CTkFont(size=18, weight="bold"), text_color=OOT_THEME["gold"]).grid(row=0, column=0, sticky="w", padx=18, pady=(14, 6))
         self.summary_tree = self.app.create_treeview(summary_card, [
-            ("sucursal", "Sucursal", 110),
-            ("modelo", "Modelo", 160),
-            ("total", "Total", 120),
+            ("sucursal", "Sucursal", 160),
+            ("cantidad", "Cantidad", 100),
+            ("total", "Total", 140),
         ])
         self.summary_tree.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 12))
 
@@ -205,30 +278,48 @@ class DashboardView(BaseView):
         inventory = self.app.get_inventory_data(refresh=False)
         if not inventory:
             return
-        df_reporte = inventory["reporte"]
-        df_usados = inventory["usados"]
-        df_xml = inventory["xml"]
 
-        total_df = pd.concat([df for df in [df_reporte, df_usados, df_xml] if not df.empty], ignore_index=True) if any(not df.empty for df in [df_reporte, df_usados, df_xml]) else pd.DataFrame()
+        dfs = []
+        filtro = self.filter_var.get()
+        if filtro in ["Todos", "Disponibles"]: dfs.append(inventory["reporte"])
+        if filtro in ["Todos", "Usados"]: dfs.append(inventory["usados"])
+        if filtro in ["Todos", "XML"]: dfs.append(inventory["xml"])
+
+        total_df = pd.concat([df for df in dfs if not df.empty], ignore_index=True) if any(not df.empty for df in dfs) else pd.DataFrame()
         total_money = pd.to_numeric(total_df.get("TOTAL", pd.Series(dtype=float)), errors="coerce").fillna(0).sum() if not total_df.empty else 0
         total_pieces = len(total_df)
-        xml_rate = (len(df_xml) / total_pieces * 100) if total_pieces else 0
+
+        # Calculate overall XML rate regardless of local filter so we always see overall health
+        global_total = len(inventory["reporte"]) + len(inventory["usados"]) + len(inventory["xml"])
+        xml_rate = (len(inventory["xml"]) / global_total * 100) if global_total else 0
         branch_count = total_df["SUCURSAL"].nunique() if not total_df.empty and "SUCURSAL" in total_df.columns else 0
 
         self.metric_labels["total"].configure(text=f"${total_money:,.2f}")
         self.metric_labels["pieces"].configure(text=str(total_pieces))
+
         self.metric_labels["xml"].configure(text=f"{xml_rate:.1f}%")
+        if xml_rate < 50:
+            self.metric_labels["xml"].configure(text_color=OOT_THEME["danger"])
+        elif xml_rate < 80:
+            self.metric_labels["xml"].configure(text_color=OOT_THEME["warning"])
+        else:
+            self.metric_labels["xml"].configure(text_color=OOT_THEME["emerald"])
+
         self.metric_labels["branches"].configure(text=str(branch_count))
 
         for item in self.summary_tree.get_children():
             self.summary_tree.delete(item)
 
-        if not total_df.empty and {"SUCURSAL", "MODELO BASE", "TOTAL"}.issubset(total_df.columns):
+        if not total_df.empty and "SUCURSAL" in total_df.columns:
             top = total_df.copy()
-            top["TOTAL"] = pd.to_numeric(top["TOTAL"], errors="coerce").fillna(0)
-            top = top.groupby(["SUCURSAL", "MODELO BASE"], as_index=False)["TOTAL"].sum().sort_values("TOTAL", ascending=False).head(12)
+            top["TOTAL"] = pd.to_numeric(top.get("TOTAL", 0), errors="coerce").fillna(0)
+            top = top.groupby("SUCURSAL", as_index=False).agg(
+                CANTIDAD=("SUCURSAL", "size"),
+                TOTAL=("TOTAL", "sum")
+            ).sort_values("TOTAL", ascending=False)
+
             for _, row in top.iterrows():
-                self.summary_tree.insert("", "end", values=(row["SUCURSAL"], row["MODELO BASE"], f"${row['TOTAL']:,.2f}"))
+                self.summary_tree.insert("", "end", values=(row["SUCURSAL"], str(row["CANTIDAD"]), f"${row['TOTAL']:,.2f}"))
 
         self.draw_chart(total_df)
 
@@ -262,19 +353,33 @@ class InventoryView(BaseView):
     def __init__(self, master, app):
         super().__init__(master, app)
         self.create_header()
+        self.grid_rowconfigure(3, weight=1)
         controls = ctk.CTkFrame(self, fg_color="transparent")
         controls.grid(row=1, column=0, sticky="ew", padx=18, pady=(0, 12))
-        controls.grid_columnconfigure(1, weight=1)
+        controls.grid_columnconfigure(3, weight=1)
 
-        ctk.CTkLabel(controls, text="Buscar:", text_color=OOT_THEME["text"]).grid(row=0, column=0, padx=(0, 10), sticky="w")
-        self.search_entry = ctk.CTkEntry(controls, placeholder_text="modelo, serie, sucursal, color...")
-        self.search_entry.grid(row=0, column=1, sticky="ew")
+        self.sucursal_opt = MultiSelectMenu(controls, title="Sucursal", values=[], command=self.refresh, fg_color=OOT_THEME["panel_alt"], hover_color=OOT_THEME["panel"])
+        self.sucursal_opt.grid(row=0, column=0, padx=(0, 10), sticky="w")
+
+        self.modelo_opt = MultiSelectMenu(controls, title="Modelo", values=[], command=self.refresh, fg_color=OOT_THEME["panel_alt"], hover_color=OOT_THEME["panel"])
+        self.modelo_opt.grid(row=0, column=1, padx=(0, 10), sticky="w")
+
+        ctk.CTkLabel(controls, text="Buscar:", text_color=OOT_THEME["text"]).grid(row=0, column=2, padx=(0, 10), sticky="w")
+        self.search_entry = ctk.CTkEntry(controls, placeholder_text="serie, color...")
+        self.search_entry.grid(row=0, column=3, sticky="ew")
         self.search_entry.bind("<KeyRelease>", lambda _e: self.refresh())
-        ctk.CTkButton(controls, text="Recargar", fg_color=OOT_THEME["forest"], hover_color=OOT_THEME["forest_hover"], command=lambda: self.app.refresh_data(force=True)).grid(row=0, column=2, padx=10)
 
-        self.tabview = ctk.CTkTabview(self, fg_color=OOT_THEME["panel"], segmented_button_selected_color=OOT_THEME["gold"], segmented_button_selected_hover_color=OOT_THEME["gold_hover"], segmented_button_unselected_color=OOT_THEME["panel_alt"])
-        self.tabview.grid(row=2, column=0, sticky="nsew", padx=18, pady=(0, 18))
-        self.grid_rowconfigure(2, weight=1)
+        ctk.CTkButton(controls, text="Guardar Snapshot", fg_color=OOT_THEME["gold"], hover_color=OOT_THEME["gold_hover"], text_color="#221A0C", command=self.save_snapshot).grid(row=0, column=4, padx=(10, 0))
+        ctk.CTkButton(controls, text="Exportar Vista", fg_color=OOT_THEME["emerald"], hover_color=OOT_THEME["forest_hover"], command=self.export_view).grid(row=0, column=5, padx=10)
+        ctk.CTkButton(controls, text="Recargar", fg_color=OOT_THEME["forest"], hover_color=OOT_THEME["forest_hover"], command=lambda: self.app.refresh_data(force=True)).grid(row=0, column=6)
+
+        totals_frame = ctk.CTkFrame(self, fg_color=OOT_THEME["panel_alt"], corner_radius=8)
+        totals_frame.grid(row=2, column=0, sticky="ew", padx=18)
+        self.lbl_totals = ctk.CTkLabel(totals_frame, text="0 piezas visibles · Total: $0.00", text_color=OOT_THEME["gold"], font=ctk.CTkFont(weight="bold"))
+        self.lbl_totals.pack(padx=14, pady=6, anchor="e")
+
+        self.tabview = ctk.CTkTabview(self, fg_color=OOT_THEME["panel"], segmented_button_selected_color=OOT_THEME["gold"], segmented_button_selected_hover_color=OOT_THEME["gold_hover"], segmented_button_unselected_color=OOT_THEME["panel_alt"], command=self.refresh_totals)
+        self.tabview.grid(row=3, column=0, sticky="nsew", padx=18, pady=(0, 18))
         self.trees = {}
         for tab_name in ["Disponibles", "Usados", "XML"]:
             tab = self.tabview.add(tab_name)
@@ -291,16 +396,71 @@ class InventoryView(BaseView):
             tree.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
             self.trees[tab_name] = tree
 
+    def _update_options(self, inventory):
+        total_df = pd.concat([df for df in [inventory.get("reporte"), inventory.get("usados"), inventory.get("xml")] if df is not None and not df.empty])
+        if total_df.empty:
+            return
+        if "SUCURSAL" in total_df.columns:
+            sucursales = sorted([str(x) for x in total_df["SUCURSAL"].dropna().unique() if str(x).strip()])
+            if not self.sucursal_opt.values:
+                self.sucursal_opt.set_values(sucursales)
+        if "MODELO BASE" in total_df.columns:
+            modelos = sorted([str(x) for x in total_df["MODELO BASE"].dropna().unique() if str(x).strip()])
+            if not self.modelo_opt.values:
+                self.modelo_opt.set_values(modelos)
+
+    def save_snapshot(self):
+        import shutil
+        from datetime import datetime
+        inv_path = Path(mg.PATH_INVENTARIO)
+        if not inv_path.exists():
+            messagebox.showwarning("Error", "No se encontró el inventario actual.")
+            return
+        backup_dir = DATA_DIR / "backups"
+        backup_dir.mkdir(exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_path = backup_dir / f"Inventario_{timestamp}.xlsx"
+        try:
+            shutil.copy2(inv_path, backup_path)
+            self.app.log(f"Snapshot guardado en {backup_path}")
+            messagebox.showinfo("Respaldado", f"Inventario copiado a:\n{backup_path}")
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo respaldar:\n{e}")
+
+    def export_view(self):
+        current_tab = self.tabview.get()
+        tree = self.trees[current_tab]
+        rows = []
+        for item in tree.get_children():
+            rows.append(tree.item(item)["values"])
+        if not rows:
+            messagebox.showwarning("Aviso", "La vista está vacía. No hay nada que exportar.")
+            return
+        import pandas as pd
+        cols = ["Sucursal", "Modelo", "Color", "Serie", "Total", "Extra"]
+        df = pd.DataFrame(rows, columns=cols)
+        out_path = filedialog.asksaveasfilename(defaultextension=".xlsx", filetypes=[("Excel", "*.xlsx")], title="Exportar Vista", initialfile=f"Vista_{current_tab}.xlsx")
+        if out_path:
+            df.to_excel(out_path, index=False)
+            self.app.log(f"Vista exportada: {out_path}")
+            messagebox.showinfo("Exportado", f"Archivo creado:\n{out_path}")
+
     def refresh(self):
         inventory = self.app.get_inventory_data(refresh=False)
         if not inventory:
             return
+        self._update_options(inventory)
         mapping = {
             "Disponibles": (inventory["reporte"], None),
             "Usados": (inventory["usados"], "MACHOTE"),
             "XML": (inventory["xml"], "UUID"),
         }
         term = self.search_entry.get().strip().lower()
+        sucursal_filter = set(self.sucursal_opt.get())
+        modelo_filter = set(self.modelo_opt.get())
+        all_sucs = set(self.sucursal_opt.values)
+        all_mods = set(self.modelo_opt.values)
+
         for name, (df, extra_col) in mapping.items():
             tree = self.trees[name]
             for item in tree.get_children():
@@ -308,10 +468,16 @@ class InventoryView(BaseView):
             if df is None or df.empty:
                 continue
             for _, row in df.iterrows():
+                suc_val = str(row.get("SUCURSAL", ""))
+                mod_val = str(row.get("MODELO BASE", ""))
+                if sucursal_filter != all_sucs and suc_val not in sucursal_filter:
+                    continue
+                if modelo_filter != all_mods and mod_val not in modelo_filter:
+                    continue
                 serie = str(row.get("No de SERIE:", ""))
                 values = [
-                    str(row.get("SUCURSAL", "")),
-                    str(row.get("MODELO BASE", "")),
+                    suc_val,
+                    mod_val,
                     str(row.get("COLOR", "")),
                     serie,
                     self.app.money(row.get("TOTAL", 0)),
@@ -320,7 +486,21 @@ class InventoryView(BaseView):
                 haystack = " ".join(values).lower()
                 if not term or term in haystack:
                     tree.insert("", "end", values=values)
+        self.refresh_totals()
 
+    def refresh_totals(self):
+        current_tab = self.tabview.get()
+        tree = self.trees[current_tab]
+        count = 0
+        total_val = 0.0
+        for item in tree.get_children():
+            count += 1
+            val_str = tree.item(item)["values"][4]
+            try:
+                total_val += float(str(val_str).replace("$", "").replace(",", ""))
+            except Exception:
+                pass
+        self.lbl_totals.configure(text=f"{count} piezas visibles · Total: ${total_val:,.2f}")
 
 class GeneratorView(BaseView):
     title = "Forja del Machote"
@@ -341,10 +521,20 @@ class GeneratorView(BaseView):
         self.account_entry = self._entry(top, 0, 2, "Cuenta", self.app.state.config.get("cuenta_default", "MP"))
         self.rfc_entry = self._entry(top, 0, 3, "RFC (opcional)", self.app.state.config.get("rfc_default", ""))
 
-        self.include_children = ctk.CTkSwitch(top, text="Incluir infantiles", progress_color=OOT_THEME["gold"])
-        self.include_children.grid(row=1, column=0, padx=12, pady=10, sticky="w")
-        self.include_motor = ctk.CTkSwitch(top, text="Incluir motocicletas", progress_color=OOT_THEME["gold"])
-        self.include_motor.grid(row=1, column=1, padx=12, pady=10, sticky="w")
+        filter_frame = ctk.CTkFrame(top, fg_color="transparent")
+        filter_frame.grid(row=1, column=0, columnspan=4, sticky="ew", padx=10, pady=10)
+        self.include_children = ctk.CTkSwitch(filter_frame, text="Incluir infantiles", progress_color=OOT_THEME["gold"])
+        self.include_children.pack(side="left", padx=12)
+        self.include_motor = ctk.CTkSwitch(filter_frame, text="Incluir motocicletas", progress_color=OOT_THEME["gold"])
+        self.include_motor.pack(side="left", padx=12)
+
+        ctk.CTkLabel(filter_frame, text="Sucursal:", text_color=OOT_THEME["muted"]).pack(side="left", padx=(20, 5))
+        self.sucursal_opt = MultiSelectMenu(filter_frame, title="Seleccionar", values=[], fg_color=OOT_THEME["panel_alt"], hover_color=OOT_THEME["panel"])
+        self.sucursal_opt.pack(side="left", padx=5)
+
+        ctk.CTkLabel(filter_frame, text="Modelo:", text_color=OOT_THEME["muted"]).pack(side="left", padx=(20, 5))
+        self.modelo_opt = MultiSelectMenu(filter_frame, title="Seleccionar", values=[], fg_color=OOT_THEME["panel_alt"], hover_color=OOT_THEME["panel"])
+        self.modelo_opt.pack(side="left", padx=5)
 
         controls = ctk.CTkFrame(top, fg_color="transparent")
         controls.grid(row=2, column=0, columnspan=4, sticky="ew", padx=10, pady=(0, 12))
@@ -366,6 +556,21 @@ class GeneratorView(BaseView):
             ("total", "Total", 120),
         ])
         self.preview_tree.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 12))
+
+    def refresh(self):
+        inventory = self.app.get_inventory_data(refresh=False)
+        if not inventory:
+            return
+        df_rep = inventory.get("reporte")
+        if df_rep is not None and not df_rep.empty:
+            if "SUCURSAL" in df_rep.columns:
+                sucursales = sorted([str(x) for x in df_rep["SUCURSAL"].dropna().unique() if str(x).strip()])
+                if not self.sucursal_opt.values:
+                    self.sucursal_opt.set_values(sucursales)
+            if "MODELO BASE" in df_rep.columns:
+                modelos = sorted([str(x) for x in df_rep["MODELO BASE"].dropna().unique() if str(x).strip()])
+                if not self.modelo_opt.values:
+                    self.modelo_opt.set_values(modelos)
 
     def _entry(self, parent, row, column, label, value=""):
         frame = ctk.CTkFrame(parent, fg_color="transparent")
@@ -393,11 +598,18 @@ class GeneratorView(BaseView):
             return
 
         try:
+            suc_list = self.sucursal_opt.get()
+            if len(suc_list) == len(self.sucursal_opt.values): suc_list = None
+            mod_list = self.modelo_opt.get()
+            if len(mod_list) == len(self.modelo_opt.values): mod_list = None
+
             df_available = mg.procesar_inventario(
                 inventory["reporte"],
                 inventory["precios"],
                 incluir_infantiles=self.include_children.get() == 1,
                 incluir_motobicis=self.include_motor.get() == 1,
+                sucursales=suc_list,
+                modelos=mod_list
             )
             preview = mg.seleccionar_articulos(df_available, target)
         except Exception as exc:
@@ -472,6 +684,7 @@ class ImportView(BaseView):
     def __init__(self, master, app):
         super().__init__(master, app)
         self.selected_pdf = ctk.StringVar(value="")
+        self.items_loaded = []
         self.create_header()
 
         card = ctk.CTkFrame(self, fg_color=OOT_THEME["panel"], corner_radius=18, border_width=1, border_color=OOT_THEME["gold"])
@@ -490,12 +703,14 @@ class ImportView(BaseView):
         self.summary_label.grid(row=1, column=0, sticky="w", padx=18)
 
         self.preview_tree = self.app.create_treeview(card, [
+            ("incluir", "Incluir", 60),
             ("sucursal", "Sucursal", 120),
             ("modelo", "Modelo", 180),
             ("color", "Color", 100),
             ("serie", "Serie", 180),
         ])
         self.preview_tree.grid(row=2, column=0, sticky="nsew", padx=12, pady=(8, 12))
+        self.preview_tree.bind("<Double-1>", self.toggle_inclusion)
 
     def select_pdf(self):
         pdf_path = filedialog.askopenfilename(title="Seleccionar PDF de mercancía", filetypes=[("PDF", "*.pdf")])
@@ -503,33 +718,59 @@ class ImportView(BaseView):
             return
         self.selected_pdf.set(pdf_path)
         try:
-            items = mg.extraer_nuevos_articulos(pdf_path)
+            self.items_loaded = mg.extraer_nuevos_articulos(pdf_path)
         except Exception as exc:
             messagebox.showerror("Error leyendo PDF", f"No se pudo analizar el PDF.\n\n{exc}")
             return
         for item in self.preview_tree.get_children():
             self.preview_tree.delete(item)
-        for item in items[:250]:
-            self.preview_tree.insert("", "end", values=(item.get("SUCURSAL", ""), item.get("MODELO BASE", ""), item.get("COLOR", ""), item.get("No de SERIE:", "")))
-        self.summary_label.configure(text=f"Se detectaron {len(items)} artículos potenciales para importar.")
-        self.app.log(f"PDF analizado: {os.path.basename(pdf_path)} con {len(items)} artículos detectados.")
+        for idx, item in enumerate(self.items_loaded):
+            # Store index in tag to easily identify it later
+            self.preview_tree.insert("", "end", values=("[X]", item.get("SUCURSAL", ""), item.get("MODELO BASE", ""), item.get("COLOR", ""), item.get("No de SERIE:", "")), tags=(str(idx),))
+        self.summary_label.configure(text=f"Se detectaron {len(self.items_loaded)} artículos. Haz doble clic para desmarcar/marcar.")
+        self.app.log(f"PDF analizado: {os.path.basename(pdf_path)} con {len(self.items_loaded)} artículos detectados.")
+
+    def toggle_inclusion(self, event):
+        region = self.preview_tree.identify_region(event.x, event.y)
+        if region != "cell":
+            return
+        column = self.preview_tree.identify_column(event.x)
+        if column != "#1":
+            return
+        item_id = self.preview_tree.identify_row(event.y)
+        if not item_id:
+            return
+        values = list(self.preview_tree.item(item_id, "values"))
+        if values[0] == "[X]":
+            values[0] = "[ ]"
+        else:
+            values[0] = "[X]"
+        self.preview_tree.item(item_id, values=values)
 
     def import_pdf(self):
         pdf_path = self.selected_pdf.get().strip()
         if not pdf_path:
             messagebox.showwarning("PDF requerido", "Primero selecciona un PDF para importar.")
             return
+        selected_items = []
+        for item_id in self.preview_tree.get_children():
+            values = self.preview_tree.item(item_id, "values")
+            if values[0] == "[X]":
+                idx = int(self.preview_tree.item(item_id, "tags")[0])
+                selected_items.append(self.items_loaded[idx])
+        if not selected_items:
+            messagebox.showwarning("Aviso", "No hay ningún artículo seleccionado para importar.")
+            return
         try:
-            output_path = mg.cargar_inventario_y_reemplazar(pdf_path)
+            output_path = mg.cargar_inventario_y_reemplazar(pdf_path, lista_articulos=selected_items)
         except Exception as exc:
             messagebox.showerror("Error importando", f"No se pudo cargar la mercancía.\n\n{exc}")
             return
-        self.app.state.record_event("carga", "Mercancía importada desde PDF", {"pdf": pdf_path, "inventario": output_path})
+        self.app.state.record_event("carga", f"Mercancía importada ({len(selected_items)} piezas)", {"pdf": pdf_path, "inventario": output_path})
         self.app.refresh_data(force=True)
         self.app.history_view.refresh()
-        self.app.log(f"Mercancía importada desde {os.path.basename(pdf_path)}")
-        messagebox.showinfo("Carga completada", f"Inventario actualizado en:\n\n{output_path}")
-
+        self.app.log(f"Mercancía importada: {len(selected_items)} piezas desde {os.path.basename(pdf_path)}")
+        messagebox.showinfo("Carga completada", f"Se guardaron {len(selected_items)} piezas.\nInventario actualizado en:\n\n{output_path}")
 
 class XMLView(BaseView):
     title = "Templo de UUID"

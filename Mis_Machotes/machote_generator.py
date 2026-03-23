@@ -218,7 +218,7 @@ def seleccionar_articulos(df_disponibles, monto_objetivo):
     return df_resultado
 
 def generar_machote(df_seleccion, monto_objetivo, empresa, rfc, cuenta_mp):
-if not os.path.exists(OUTPUT_DIR):
+    if not os.path.exists(OUTPUT_DIR):
         os.makedirs(OUTPUT_DIR)
         
     fecha_str = datetime.now().strftime("%d %b %Y").upper()
@@ -365,14 +365,17 @@ def extraer_nuevos_articulos(ruta_pdf):
     return articulos_encontrados
 
 
-def cargar_inventario(ruta_pdf, path_inventario):
+def cargar_inventario(ruta_pdf, path_inventario, lista_articulos=None):
     import openpyxl
     from openpyxl.styles import Font
     from copy import copy
     import pandas as pd
     
     print(f"Leyendo PDF de carga: {ruta_pdf}")
-    nuevos = extraer_nuevos_articulos(ruta_pdf)
+    if lista_articulos is not None:
+        nuevos = lista_articulos
+    else:
+        nuevos = extraer_nuevos_articulos(ruta_pdf)
     print(f"Se encontraron {len(nuevos)} articulos en el PDF.")
     
     # Cargar lista de precios
@@ -781,8 +784,8 @@ def generar_machote_y_actualizar(df_seleccion, monto_objetivo, empresa, rfc, cue
     return ruta_machote, nombre_machote, inventario_final
 
 
-def cargar_inventario_y_reemplazar(ruta_pdf, path_inventario=PATH_INVENTARIO):
-    cargar_inventario(ruta_pdf, path_inventario)
+def cargar_inventario_y_reemplazar(ruta_pdf, path_inventario=PATH_INVENTARIO, lista_articulos=None):
+    cargar_inventario(ruta_pdf, path_inventario, lista_articulos=lista_articulos)
     path_salida = path_inventario.replace(".xlsx", "_CARGADO.xlsx")
     return _replace_inventory_file(path_salida, path_inventario)
 
