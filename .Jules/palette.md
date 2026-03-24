@@ -1,0 +1,3 @@
+## 2024-05-24 - [Micro-UX: Dropdown Affordance and Empty State Guidance]
+**Learning:** CustomTkinter components without built-in affordances (like the custom `MultiSelectMenu` acting as a dropdown) can confuse users since they visually resemble standard buttons. Furthermore, empty state messaging that simply states a lack of data ("Sin PDF seleccionado") without providing a clear next action leaves users guessing what to do.
+**Action:** When implementing custom interactive components, always include standard visual cues (e.g., a "▼" indicator for dropdowns). For empty states, always couple the status message with a direct Call-To-Action (CTA) instructing the user exactly how to proceed (e.g., "Haz clic en 'Elegir PDF' para comenzar").

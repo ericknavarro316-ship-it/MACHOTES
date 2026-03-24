@@ -86,11 +86,11 @@ class MultiSelectMenu(ctk.CTkButton):
         selected = len(self.get())
         total = len(self.values)
         if selected == total:
-            self.configure(text=f"{self._title} (Todos)")
+            self.configure(text=f"{self._title} (Todos) ▼")
         elif selected == 0:
-            self.configure(text=f"{self._title} (Ninguno)")
+            self.configure(text=f"{self._title} (Ninguno) ▼")
         else:
-            self.configure(text=f"{self._title} ({selected})")
+            self.configure(text=f"{self._title} ({selected}) ▼")
 
     def toggle_dropdown(self):
         if self.dropdown is not None and self.dropdown.winfo_exists():
@@ -700,7 +700,7 @@ class ImportView(BaseView):
         ctk.CTkButton(top, text="Importar mercancía", fg_color=OOT_THEME["forest"], hover_color=OOT_THEME["forest_hover"], command=self.import_pdf).pack(side="left", padx=10)
         ctk.CTkLabel(top, textvariable=self.selected_pdf, text_color=OOT_THEME["text"]).pack(side="left", padx=8)
 
-        self.summary_label = ctk.CTkLabel(card, text="Sin PDF seleccionado.", text_color=OOT_THEME["muted"])
+        self.summary_label = ctk.CTkLabel(card, text="Sin PDF seleccionado. Haz clic en 'Elegir PDF' para comenzar.", text_color=OOT_THEME["muted"])
         self.summary_label.grid(row=1, column=0, sticky="w", padx=18)
 
         self.preview_tree = self.app.create_treeview(card, [
@@ -794,7 +794,7 @@ class XMLView(BaseView):
         ctk.CTkButton(top, text="Validar y actualizar", fg_color=OOT_THEME["forest"], hover_color=OOT_THEME["forest_hover"], command=self.process_xml).pack(side="left", padx=10)
         ctk.CTkLabel(top, textvariable=self.selected_dir, text_color=OOT_THEME["text"]).pack(side="left", padx=8)
 
-        self.summary_label = ctk.CTkLabel(card, text="Aún no se ha inspeccionado ninguna carpeta.", text_color=OOT_THEME["muted"])
+        self.summary_label = ctk.CTkLabel(card, text="Aún no se ha inspeccionado ninguna carpeta. Haz clic en 'Elegir carpeta XML' para comenzar.", text_color=OOT_THEME["muted"])
         self.summary_label.grid(row=1, column=0, sticky="w", padx=18)
 
         self.preview_tree = self.app.create_treeview(card, [
