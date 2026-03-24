@@ -9,6 +9,7 @@ Panel administrativo de escritorio para generar machotes, controlar inventario, 
 - Carga de mercancía desde PDF.
 - Validación de XML y conciliación de UUIDs.
 - Historial local de acciones y ajustes persistentes.
+- Carga PDF con modo simulación, limpieza rápida de selección y reporte post-carga.
 
 ## Estilo visual
 La aplicación usa una interfaz inspirada en **The Legend of Zelda: Ocarina of Time**, con tonos bosque, dorados y paneles tipo santuario.
@@ -17,6 +18,52 @@ La aplicación usa una interfaz inspirada en **The Legend of Zelda: Ocarina of T
 ```bash
 cd Mis_Machotes
 python start_app.py
+```
+
+## Validar instalación (sin abrir ventana)
+Si quieres revisar que todo está correcto antes de abrir la interfaz, ejecuta:
+
+```bash
+cd Mis_Machotes
+python start_app.py --check-only
+```
+
+Este modo valida dependencias, archivos base y que `dashboard_app.py` tenga las secciones críticas.
+
+## Respaldar base de datos (SQLite)
+Puedes crear un respaldo rápido de `app_data/inventory.db` desde terminal:
+
+```bash
+cd Mis_Machotes
+python start_app.py --backup-db
+```
+
+Para listar respaldos disponibles:
+
+```bash
+cd Mis_Machotes
+python start_app.py --list-backups
+```
+
+Para restaurar uno específico:
+
+```bash
+cd Mis_Machotes
+python start_app.py --restore-backup inventory_20260324_120000.db
+```
+
+Para restaurar automáticamente el respaldo más reciente:
+
+```bash
+cd Mis_Machotes
+python start_app.py --restore-latest
+```
+
+Para conservar solo los últimos `N` respaldos y limpiar los demás:
+
+```bash
+cd Mis_Machotes
+python start_app.py --prune-backups 20
 ```
 
 ## Descargar el proyecto actualizado
@@ -59,6 +106,15 @@ python start_app.py
 ```
 
 Ese archivo revisa primero si te faltan librerías y, si hace falta algo, te dice exactamente qué instalar antes de intentar abrir la ventana.
+
+## Carga de PDF (nuevo flujo recomendado)
+En la vista **Puerto Mercante** ahora tienes:
+- **Limpiar selección**: borra el PDF cargado y limpia la tabla previa.
+- **Simular importación**: te dice cuántos artículos seleccionados serían nuevos y cuántos parecen duplicados.
+- **Reporte post-carga**: al importar, deja resumen en el log interno.
+
+Además, si el parser detecta rarezas del PDF (por ejemplo páginas sin texto), guarda advertencias en:
+`Mis_Machotes/app_data/pdf_parse_warnings.log`.
 
 ## Si `python start_app.py` regresa directo a la consola
 Eso significa que la app se cerró al arrancar. Con la versión nueva del lanzador ya debe mostrar el error completo en la misma terminal para que puedas copiarlo y pegarlo.
