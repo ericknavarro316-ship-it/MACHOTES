@@ -521,6 +521,7 @@ class InventoryView(BaseView):
         self.refresh_totals()
 
     def refresh_totals(self):
+        import math
         current_tab = self.tabview.get()
         tree = self.trees[current_tab]
         count = 0
@@ -529,7 +530,9 @@ class InventoryView(BaseView):
             count += 1
             val_str = tree.item(item)["values"][4]
             try:
-                total_val += float(str(val_str).replace("$", "").replace(",", ""))
+                val = float(str(val_str).replace("$", "").replace(",", ""))
+                if not math.isnan(val):
+                    total_val += val
             except Exception:
                 pass
         self.lbl_totals.configure(text=f"{count} piezas visibles · Total: ${total_val:,.2f}")
@@ -1139,8 +1142,12 @@ class ZeldaApp(ctk.CTk):
         return TreeBundle(frame, tree)
 
     def money(self, value):
+        import math
         try:
-            return f"${float(value):,.2f}"
+            val = float(value)
+            if math.isnan(val):
+                return "$0.00"
+            return f"${val:,.2f}"
         except Exception:
             return "$0.00"
 
