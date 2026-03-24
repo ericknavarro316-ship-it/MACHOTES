@@ -9,12 +9,15 @@ from openpyxl.styles import Font, Border, Side, PatternFill, Alignment, Protecti
 import os
 import sys
 import argparse
+import unicodedata
 from datetime import datetime
 
 PATH_INVENTARIO = "machotes/Inventario_Final.xlsx"
 PATH_MACHOTE = "machotes/EJEMPLO MACHOTE.xlsx"
 PATH_PRECIOS = "machotes/Lista de precios ok.xlsx"
 OUTPUT_DIR = "machotes_generados"
+APP_DATA_DIR = os.path.join(os.path.dirname(__file__), "app_data")
+PDF_WARNINGS_LOG = os.path.join(APP_DATA_DIR, "pdf_parse_warnings.log")
 
 MAPEOS_MODELOS = {
     "S2 AIR V2": "S2",
@@ -22,45 +25,111 @@ MAPEOS_MODELOS = {
     "M2MAX": "M2MAX 8.5",
     "M2MAXB": "M2MAXB10"
 }
+COLORES_VALIDOS = {
+    "VERDE", "ROJO", "AZUL", "ROSA", "BLANCO", "NEGRO",
+    "AMARILLO", "CAFE", "GRIS", "CAYENNE", "PURPURA", "PÚRPURA",
+}
+
+
+def _es_token_color(token):
+    if not token:
+        return False
+    normalizado = str(token).strip().upper().replace("-", "/")
+    partes = [p.strip() for p in normalizado.split("/") if p.strip()]
+    if not partes:
+        return False
+    return all(parte in COLORES_VALIDOS for parte in partes)
 
 
 def extraer_datos_empresa(empresa_busqueda):
-    # Buscar el PDF en la carpeta machotes que contenga "CSF" y el nombre de la empresa
+    def _norm(texto):
+        txt = unicodedata.normalize("NFKD", str(texto or ""))
+        txt = "".join(ch for ch in txt if not unicodedata.combining(ch))
+        txt = re.sub(r"[^a-zA-Z0-9]+", " ", txt).strip().lower()
+        return txt
+
+    def _puntaje_coincidencia(nombre_empresa, nombre_archivo):
+        tokens_emp = [t for t in _norm(nombre_empresa).split() if len(t) > 2]
+        if not tokens_emp:
+            return 0
+        archivo_norm = _norm(nombre_archivo)
+        score = sum(1 for token in tokens_emp if token in archivo_norm)
+        if _norm(nombre_empresa) in archivo_norm:
+            score += 3
+        return score
+
+    # Buscar PDF CSF más parecido al nombre proporcionado
     archivos_pdf = glob.glob(os.path.join("machotes", "*CSF*.pdf"))
-    
-    empresa_lower = empresa_busqueda.lower()
-    mejor_coincidencia = None
-    
-    for archivo in archivos_pdf:
-        if empresa_lower in os.path.basename(archivo).lower():
-            mejor_coincidencia = archivo
-            break
-            
-    if not mejor_coincidencia:
-        print(f"No se encontró un archivo CSF para la empresa '{empresa_busqueda}'. Se usarán los datos proporcionados por defecto o argumentos.")
+    if not archivos_pdf:
+        print(f"No se encontró ningún archivo CSF en 'machotes' para '{empresa_busqueda}'.")
         return None, None
-        
+
+    ranked = sorted(
+        archivos_pdf,
+        key=lambda path: _puntaje_coincidencia(empresa_busqueda, os.path.basename(path)),
+        reverse=True,
+    )
+    mejor_coincidencia = ranked[0]
+    best_score = _puntaje_coincidencia(empresa_busqueda, os.path.basename(mejor_coincidencia))
+    if best_score == 0:
+        print(
+            f"No hubo coincidencia directa para '{empresa_busqueda}'. "
+            f"Usando CSF por defecto: {os.path.basename(mejor_coincidencia)}"
+        )
+
     print(f"Extrayendo datos de CSF: {mejor_coincidencia}")
     doc = fitz.open(mejor_coincidencia)
-    text = doc[0].get_text()
-    
+    text = "\n".join(page.get_text() for page in doc[:2])
+    doc.close()
+
     rfc = None
     razon_social = None
-    
-    lines = text.split('\n')
-    for i, line in enumerate(lines):
-        if "RFC:" in line and not rfc:
-            if i + 1 < len(lines) and re.match(r"^[A-Z0-9&]{12,13}$", lines[i+1].strip()):
-                rfc = lines[i+1].strip()
-        
-        if "Denominación/Razón Social:" in line:
-            if i + 1 < len(lines):
-                razon_social = lines[i+1].strip()
-                
+
+    # RFC flexible (persona moral/física)
+    rfc_match = re.search(r"\b([A-Z&Ñ]{3,4}\d{6}[A-Z0-9]{3})\b", text, re.IGNORECASE)
+    if rfc_match:
+        rfc = rfc_match.group(1).upper()
+
+    # Razón social con varias etiquetas posibles del CSF
+    patrones_razon = [
+        r"Denominaci[oó]n\s*/?\s*Raz[oó]n\s*Social\s*:?\s*(.+)",
+        r"Denominaci[oó]n\s+o\s+Raz[oó]n\s+Social\s*:?\s*(.+)",
+        r"Nombre,\s*denominaci[oó]n\s+o\s+raz[oó]n\s+social\s*:?\s*(.+)",
+    ]
+    for patron in patrones_razon:
+        match = re.search(patron, text, re.IGNORECASE)
+        if match:
+            value = match.group(1).strip()
+            if value and len(value) > 3:
+                razon_social = value
+                break
+
+    # Fallback: a veces el valor viene en la siguiente línea
+    if not razon_social:
+        lines = [ln.strip() for ln in text.splitlines()]
+        for idx, line in enumerate(lines):
+            if re.search(r"Denominaci[oó]n|Raz[oó]n Social|raz[oó]n social", line, re.IGNORECASE):
+                if idx + 1 < len(lines) and lines[idx + 1]:
+                    razon_social = lines[idx + 1].strip()
+                    break
+
     if not rfc or not razon_social:
-        print(f"No se pudo extraer el RFC o Razón Social del PDF {mejor_coincidencia}.")
-        
+        print(f"No se pudo extraer RFC o Razón Social con precisión del PDF {os.path.basename(mejor_coincidencia)}.")
     return rfc, razon_social
+
+
+def obtener_empresas_csf():
+    archivos_pdf = glob.glob(os.path.join("machotes", "*CSF*.pdf"))
+    empresas = []
+    for path in archivos_pdf:
+        nombre = os.path.basename(path)
+        nombre = re.sub(r"\.pdf$", "", nombre, flags=re.IGNORECASE)
+        nombre = re.sub(r"(?i)\bcsf\b", "", nombre)
+        nombre = re.sub(r"[_\-]+", " ", nombre)
+        nombre = re.sub(r"\s+", " ", nombre).strip()
+        if nombre:
+            empresas.append(nombre.upper())
+    return sorted(set(empresas))
 
 import db_manager
 
@@ -310,7 +379,18 @@ def generar_machote(df_seleccion, monto_objetivo, empresa, rfc, cuenta_mp):
     return ruta_salida, nombre_archivo
 
 
-def extraer_nuevos_articulos(ruta_pdf):
+def _guardar_warnings_pdf(ruta_pdf, warnings):
+    if not warnings:
+        return
+    os.makedirs(APP_DATA_DIR, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with open(PDF_WARNINGS_LOG, "a", encoding="utf-8") as fh:
+        fh.write(f"\n[{timestamp}] {ruta_pdf}\n")
+        for warning in warnings:
+            fh.write(f"- {warning}\n")
+
+
+def extraer_nuevos_articulos(ruta_pdf, with_report=False):
     import pdfplumber
     import re
     import os
@@ -319,11 +399,16 @@ def extraer_nuevos_articulos(ruta_pdf):
     sucursal = match.group(1).strip() if match else "ALMACEN"
     
     articulos_encontrados = []
+    warnings = []
+    bloques_detectados = 0
     
     with pdfplumber.open(ruta_pdf) as pdf:
         text = ""
         for p in pdf.pages:
-            text += p.extract_text(layout=True) + "\n"
+            page_text = p.extract_text(layout=True) or ""
+            if not page_text.strip():
+                warnings.append(f"Página {p.page_number} sin texto extraíble.")
+            text += page_text + "\n"
             
     lineas = text.split("\n")
     modelo_actual = ""
@@ -337,19 +422,25 @@ def extraer_nuevos_articulos(ruta_pdf):
         match_bloque = re.match(r"^(.+?)\s+(\d+)\s+\(\d+\)\s+([A-Z0-9, ]+)\s+\$([\d,]+\.\d{2})", linea)
         
         if match_bloque:
+            bloques_detectados += 1
             nombre_completo = match_bloque.group(1).strip()
             partes_nombre = nombre_completo.split(" ")
             
-            if len(partes_nombre) > 1 and partes_nombre[-1].upper() in ['VERDE', 'ROJO', 'AZUL', 'ROSA', 'BLANCO', 'NEGRO', 'AMARILLO', 'CAFE', 'GRIS', 'CAYENNE', 'PURPURA', 'PÚRPURA']:
+            ultimo_token = partes_nombre[-1].upper() if partes_nombre else ""
+            if len(partes_nombre) > 1 and _es_token_color(ultimo_token):
                 modelo_actual = " ".join(partes_nombre[:-1])
-                color_actual = partes_nombre[-1].upper()
+                color_actual = ultimo_token.replace("-", "/")
             else:
                 modelo_actual = nombre_completo
                 color_actual = ""
                 if i + 1 < len(lineas):
-                    siguiente = lineas[i+1].strip().split()[0]
-                    if re.match(r"^[A-ZÚ]+", siguiente) and siguiente not in ["L1LTWT", "HWM7MTEZA", "LU5RMC"]:
-                        color_actual = siguiente
+                    tokens = lineas[i + 1].strip().split()
+                    if tokens:
+                        siguiente = tokens[0]
+                        if _es_token_color(siguiente) and siguiente not in ["L1LTWT", "HWM7MTEZA", "LU5RMC"]:
+                            color_actual = siguiente.upper().replace("-", "/")
+                    else:
+                        warnings.append(f"Línea {i + 2} vacía al intentar detectar color para '{nombre_completo}'.")
             
             series_str = match_bloque.group(3).strip()
             series = [s.strip() for s in series_str.split(',')]
@@ -369,7 +460,17 @@ def extraer_nuevos_articulos(ruta_pdf):
                 if "$" in lin_j or re.match(r"^(.+?)\s+(\d+)\s+\(\d+\)", lin_j):
                     break
                 j += 1
-                
+
+    _guardar_warnings_pdf(ruta_pdf, warnings)
+    report = {
+        "lineas_analizadas": len(lineas),
+        "bloques_detectados": bloques_detectados,
+        "articulos_detectados": len(articulos_encontrados),
+        "warnings": len(warnings),
+        "warnings_log": PDF_WARNINGS_LOG,
+    }
+    if with_report:
+        return articulos_encontrados, warnings, report
     return articulos_encontrados
 
 

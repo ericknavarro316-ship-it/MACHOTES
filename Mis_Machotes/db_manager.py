@@ -162,7 +162,8 @@ def get_inventory_dataframes():
         'clave_sat': 'CLAVE SAT',
         'descripcion': 'DESCRIPCION',
         'machote': 'MACHOTE',
-        'uuid': 'UUID'
+        'uuid': 'UUID',
+        'fecha_actualizacion': 'FECHA ACTUALIZACION',
     }
 
     try:
