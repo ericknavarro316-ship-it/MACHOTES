@@ -843,6 +843,261 @@ def actualizar_inventario_base(df_seleccion, nombre_machote):
     wb_inv.save(nuevo_inventario_path)
     return nuevo_inventario_path
 
+def importar_machote_externo(ruta_machote):
+    import pandas as pd
+    from datetime import datetime
+    import os
+
+    print(f"Importando machote externo desde: {ruta_machote}")
+    df_externo = pd.read_excel(ruta_machote, header=None)
+
+    series_encontradas = []
+
+    # Buscar posibles columnas de serie
+    for idx, row in df_externo.iterrows():
+        # Vamos a buscar en todas las celdas el formato de serie
+        for col in df_externo.columns:
+            val = str(row[col]).strip()
+            # Asumimos que una serie es algo como XXXXXX y típicamente alfanumérico
+            import re
+
+            # Buscar explícitamente "NO DE SERIE:"
+            match = re.search(r"NO DE SERIE:\s*([A-Z0-9]+)", val, re.IGNORECASE)
+            if match:
+                s = match.group(1).strip()
+                if len(s) > 5 and s not in series_encontradas:
+                    series_encontradas.append(s)
+            elif "SERIE" in val.upper():
+                continue # Header row
+            else:
+                # Intento heurístico: Si es una celda sola y parece una serie (alfanumérica, >5 chars)
+                # que está cerca de otras columnas descriptivas.
+                pass
+
+    if not series_encontradas:
+        # Modo fallback: buscar en las columnas que parezcan series
+        for col in df_externo.columns:
+            for val in df_externo[col].dropna():
+                val_str = str(val).strip()
+                # Verificar si parece una serie pura alfanumerica
+                if len(val_str) > 5 and val_str.isalnum():
+                    if val_str not in series_encontradas:
+                        series_encontradas.append(val_str)
+
+    if not series_encontradas:
+        print("No se encontraron números de serie válidos en el archivo externo.")
+        return [], 0
+
+    print(f"Series detectadas en el archivo externo: {len(series_encontradas)}")
+
+    nombre_machote = os.path.basename(ruta_machote)
+    series_a_marcar = set(series_encontradas)
+
+    # Get available items to see which ones match
+    df_rep, _, _ = db_manager.get_inventory_dataframes()
+
+    if df_rep is None or df_rep.empty or "No de SERIE:" not in df_rep.columns:
+        print("No hay inventario disponible para cruzar.")
+        return series_encontradas, 0
+
+    series_disponibles = set(df_rep["No de SERIE:"].astype(str).str.strip().tolist())
+
+    series_coincidentes = series_a_marcar.intersection(series_disponibles)
+
+    if series_coincidentes:
+        db_manager.mark_items_as_used(list(series_coincidentes), f"EXT: {nombre_machote}")
+
+        # We should also update the Excel file to reflect the database changes.
+        actualizar_inventario_base_por_series(list(series_coincidentes), f"EXT: {nombre_machote}")
+
+    return list(series_coincidentes), len(series_encontradas)
+
+def actualizar_inventario_base_por_series(series_usadas, nombre_machote):
+    # Similar to actualizar_inventario_base but accepts a list of series instead of a dataframe
+    print("Actualizando Excel de Inventario...")
+    import openpyxl
+    from openpyxl.styles import Font
+    from copy import copy
+
+    wb_inv = openpyxl.load_workbook(PATH_INVENTARIO)
+    ws_reporte = wb_inv['REPORTE']
+    if 'USADOS' not in wb_inv.sheetnames:
+        wb_inv.create_sheet('USADOS')
+    ws_usados = wb_inv['USADOS']
+
+    col_serie = 6
+    for c in range(1, 20):
+        if ws_reporte.cell(row=4, column=c).value == 'No de SERIE:':
+            col_serie = c
+            break
+
+    fila_usados = ws_usados.max_row + 1
+    for r in range(ws_usados.max_row, 4, -1):
+        if ws_usados.cell(row=r, column=1).value is not None or ws_usados.cell(row=r, column=2).value is not None:
+            fila_usados = r + 1
+            break
+    else:
+        fila_usados = 5
+
+    filas_a_borrar = []
+
+    for r in range(5, ws_reporte.max_row + 1):
+        serie_val = ws_reporte.cell(row=r, column=col_serie).value
+        if serie_val and str(serie_val).strip() in series_usadas:
+            for c in range(1, ws_reporte.max_column + 1):
+                origen = ws_reporte.cell(row=r, column=c)
+                destino = ws_usados.cell(row=fila_usados, column=c)
+                destino.value = origen.value
+                if origen.font: destino.font = copy(origen.font)
+                if origen.border: destino.border = copy(origen.border)
+                if origen.fill: destino.fill = copy(origen.fill)
+                if origen.number_format: destino.number_format = origen.number_format
+                if origen.alignment: destino.alignment = copy(origen.alignment)
+
+            # Asignar MACHOTE en col 14
+            ws_usados.cell(row=fila_usados, column=14).value = nombre_machote
+            ws_usados.cell(row=fila_usados, column=14).font = Font(bold=True)
+
+            fila_usados += 1
+            filas_a_borrar.append(r)
+
+    for r in reversed(filas_a_borrar):
+        ws_reporte.delete_rows(r, 1)
+
+    # Recalcular
+    ws_xml = wb_inv['XML_ENCONTRADOS'] if 'XML_ENCONTRADOS' in wb_inv.sheetnames else None
+    hojas_a_recalcular = [ws_reporte, ws_usados]
+    if ws_xml:
+        hojas_a_recalcular.append(ws_xml)
+
+    for ws in hojas_a_recalcular:
+        ultima_fila = ws.max_row
+        rango_fin = ultima_fila if ultima_fila >= 5 else 5
+        ws.cell(row=2, column=2).value = f"=SUM(E5:E{rango_fin})"
+        ws.cell(row=2, column=5).value = f"=SUM(I5:I{rango_fin})"
+        ws.cell(row=2, column=8).value = f"=SUM(J5:J{rango_fin})"
+        ws.cell(row=2, column=11).value = f"=SUM(K5:K{rango_fin})"
+
+    nuevo_inventario_path = PATH_INVENTARIO.replace(".xlsx", "_EXT_ACTUALIZADO.xlsx")
+    wb_inv.save(nuevo_inventario_path)
+    # Movemos el _replace_inventory_file arriba para que pueda ser llamado
+    return _replace_inventory_file(nuevo_inventario_path, PATH_INVENTARIO)
+
+
+def _replace_inventory_file(nuevo_path, path_inventario=PATH_INVENTARIO):
+    import shutil
+    import os
+    if not os.path.exists(nuevo_path):
+        raise FileNotFoundError(f"No se encontró el archivo actualizado: {nuevo_path}")
+    shutil.move(nuevo_path, path_inventario)
+    return path_inventario
+
+
+def deshacer_machote(nombre_machote):
+    import openpyxl
+    from openpyxl.styles import Font
+    from copy import copy
+    import pandas as pd
+
+    print(f"Deshaciendo machote: {nombre_machote}")
+
+    conn = db_manager.get_connection()
+    df_usados = pd.read_sql_query("SELECT * FROM inventario WHERE estado='USADO' AND machote=?", conn, params=(nombre_machote,))
+
+    if df_usados.empty:
+        print("No se encontraron artículos para este machote.")
+        conn.close()
+        return False
+
+    series_a_restaurar = df_usados['no_serie'].tolist()
+
+    # 1. Update SQLite
+    cursor = conn.cursor()
+    placeholders = ','.join('?' * len(series_a_restaurar))
+    cursor.execute(f'''
+    UPDATE inventario
+    SET estado = 'DISPONIBLE', machote = NULL
+    WHERE no_serie IN ({placeholders}) AND estado = 'USADO'
+    ''', series_a_restaurar)
+    # Don't commit yet, wait for Excel to succeed!
+
+    # 2. Update Excel
+    wb_inv = openpyxl.load_workbook(PATH_INVENTARIO)
+    if 'USADOS' not in wb_inv.sheetnames or 'REPORTE' not in wb_inv.sheetnames:
+        return False
+
+    ws_usados = wb_inv['USADOS']
+    ws_reporte = wb_inv['REPORTE']
+
+    col_serie = 6
+    for c in range(1, 20):
+        if ws_usados.cell(row=4, column=c).value == 'No de SERIE:':
+            col_serie = c
+            break
+
+    fila_reporte = ws_reporte.max_row + 1
+    for r in range(ws_reporte.max_row, 4, -1):
+        if ws_reporte.cell(row=r, column=1).value is not None or ws_reporte.cell(row=r, column=2).value is not None:
+            fila_reporte = r + 1
+            break
+    else:
+        fila_reporte = 5
+
+    filas_a_borrar = []
+
+    for r in range(5, ws_usados.max_row + 1):
+        serie_val = ws_usados.cell(row=r, column=col_serie).value
+        if serie_val and str(serie_val).strip() in series_a_restaurar:
+            for c in range(1, ws_usados.max_column + 1):
+                if c == 14: # Columna de MACHOTE
+                    ws_reporte.cell(row=fila_reporte, column=c).value = None
+                    continue
+
+                origen = ws_usados.cell(row=r, column=c)
+                destino = ws_reporte.cell(row=fila_reporte, column=c)
+                destino.value = origen.value
+                if origen.font: destino.font = copy(origen.font)
+                if origen.border: destino.border = copy(origen.border)
+                if origen.fill: destino.fill = copy(origen.fill)
+                if origen.number_format: destino.number_format = origen.number_format
+                if origen.alignment: destino.alignment = copy(origen.alignment)
+
+            fila_reporte += 1
+            filas_a_borrar.append(r)
+
+    for r in reversed(filas_a_borrar):
+        ws_usados.delete_rows(r, 1)
+
+    # Recalcular
+    ws_xml = wb_inv['XML_ENCONTRADOS'] if 'XML_ENCONTRADOS' in wb_inv.sheetnames else None
+    hojas_a_recalcular = [ws_reporte, ws_usados]
+    if ws_xml:
+        hojas_a_recalcular.append(ws_xml)
+
+    for ws in hojas_a_recalcular:
+        ultima_fila = ws.max_row
+        rango_fin = ultima_fila if ultima_fila >= 5 else 5
+        ws.cell(row=2, column=2).value = f"=SUM(E5:E{rango_fin})"
+        ws.cell(row=2, column=5).value = f"=SUM(I5:I{rango_fin})"
+        ws.cell(row=2, column=8).value = f"=SUM(J5:J{rango_fin})"
+        ws.cell(row=2, column=11).value = f"=SUM(K5:K{rango_fin})"
+
+    nuevo_inventario_path = PATH_INVENTARIO.replace(".xlsx", "_RESTORED.xlsx")
+    wb_inv.save(nuevo_inventario_path)
+
+    # Check if the file replacement throws an error before committing
+    try:
+        _replace_inventory_file(nuevo_inventario_path, PATH_INVENTARIO)
+        # Commit a SQLite solo despues de haber guardado en Excel correctamente
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        raise e
+    finally:
+        conn.close()
+
+    return True
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--monto", type=float, required=False)

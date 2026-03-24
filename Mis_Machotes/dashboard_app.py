@@ -27,7 +27,7 @@ DATA_DIR.mkdir(exist_ok=True)
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
 
-OOT_THEME = {
+CURRENT_THEME = {
     "bg": "#0F1A12",
     "panel": "#17271B",
     "panel_alt": "#203423",
@@ -43,6 +43,32 @@ OOT_THEME = {
     "warning": "#B88A3B",
     "sky": "#6AA7A5",
 }
+
+HW_THEME = {
+    "bg": "#121212",        # Almost black background
+    "panel": "#1E1E1E",     # Dark gray panel
+    "panel_alt": "#2C2C2C", # Lighter gray panel
+    "gold": "#FF3B30",      # Honey Whale Red/Orange accent
+    "gold_hover": "#D32F2F",# Darker Red
+    "forest": "#424242",    # Gray instead of forest green
+    "forest_hover": "#616161",
+    "emerald": "#4CAF50",   # Green for success
+    "text": "#FFFFFF",      # White text
+    "muted": "#B0BEC5",     # Light gray muted text
+    "danger": "#F44336",    # Red danger
+    "danger_hover": "#D32F2F",
+    "warning": "#FF9800",   # Orange warning
+    "sky": "#2196F3",       # Blue
+}
+
+CURRENT_THEME = CURRENT_THEME.copy()
+
+def update_theme_colors(theme_name):
+    global CURRENT_THEME
+    if theme_name == "HoneyWhale":
+        CURRENT_THEME.update(HW_THEME)
+    else:
+        CURRENT_THEME.update(CURRENT_THEME)
 
 DEFAULT_CONFIG = {
     "empresa_default": "MOVILIDAD ELECTRICA DE JALISCO",
@@ -116,7 +142,7 @@ class MultiSelectMenu(ctk.CTkButton):
             y = self.winfo_rooty() + self.winfo_height()
             self.dropdown.geometry(f"+{int(x)}+{int(y)}")
 
-            main_frame = ctk.CTkFrame(self.dropdown, fg_color=OOT_THEME["panel"], border_color=OOT_THEME["gold"], border_width=1)
+            main_frame = ctk.CTkFrame(self.dropdown, fg_color=CURRENT_THEME["panel"], border_color=CURRENT_THEME["gold"], border_width=1)
             main_frame.pack(fill="both", expand=True)
 
             # Search entry
@@ -146,14 +172,14 @@ class MultiSelectMenu(ctk.CTkButton):
             def close_dropdown():
                 self.toggle_dropdown()
 
-            ctk.CTkButton(btn_frame, text="Todo", width=50, height=24, command=select_all, fg_color=OOT_THEME["panel_alt"], hover_color=OOT_THEME["forest_hover"]).pack(side="left", padx=2)
-            ctk.CTkButton(btn_frame, text="Nada", width=50, height=24, command=deselect_all, fg_color=OOT_THEME["panel_alt"], hover_color=OOT_THEME["danger_hover"]).pack(side="left", padx=2)
-            ctk.CTkButton(btn_frame, text="Solo visibles", width=90, height=24, command=select_visible_only, fg_color=OOT_THEME["panel_alt"], hover_color=OOT_THEME["gold_hover"]).pack(side="left", padx=2)
-            ctk.CTkButton(btn_frame, text="Cerrar", width=50, height=24, command=close_dropdown, fg_color=OOT_THEME["gold"], text_color="#0D0D12", hover_color=OOT_THEME["gold_hover"]).pack(side="right", padx=2)
+            ctk.CTkButton(btn_frame, text="Todo", width=50, height=24, command=select_all, fg_color=CURRENT_THEME["panel_alt"], hover_color=CURRENT_THEME["forest_hover"]).pack(side="left", padx=2)
+            ctk.CTkButton(btn_frame, text="Nada", width=50, height=24, command=deselect_all, fg_color=CURRENT_THEME["panel_alt"], hover_color=CURRENT_THEME["danger_hover"]).pack(side="left", padx=2)
+            ctk.CTkButton(btn_frame, text="Solo visibles", width=90, height=24, command=select_visible_only, fg_color=CURRENT_THEME["panel_alt"], hover_color=CURRENT_THEME["gold_hover"]).pack(side="left", padx=2)
+            ctk.CTkButton(btn_frame, text="Cerrar", width=50, height=24, command=close_dropdown, fg_color=CURRENT_THEME["gold"], text_color="#0D0D12", hover_color=CURRENT_THEME["gold_hover"]).pack(side="right", padx=2)
 
             self.checkboxes = []
             for val in self.values:
-                cb = ctk.CTkCheckBox(self.options_frame, text=val, variable=self.variables[val], onvalue=1, offvalue=0, fg_color=OOT_THEME["forest"], hover_color=OOT_THEME["forest_hover"], text_color=OOT_THEME["text"])
+                cb = ctk.CTkCheckBox(self.options_frame, text=val, variable=self.variables[val], onvalue=1, offvalue=0, fg_color=CURRENT_THEME["forest"], hover_color=CURRENT_THEME["forest_hover"], text_color=CURRENT_THEME["text"])
                 cb.pack(anchor="w", padx=10, pady=5)
                 self.checkboxes.append((cb, val))
 
@@ -210,7 +236,13 @@ class AppState:
         self.last_generated_file = None
         self.last_import_backup = None
 
-        ctk.set_appearance_mode(self.config.get("theme_mode", "Dark"))
+        mode = self.config.get("theme_mode", "Dark")
+        if mode in ["Dark", "Light", "System"]:
+            ctk.set_appearance_mode(mode)
+        else:
+            ctk.set_appearance_mode("Dark")
+
+        update_theme_colors(mode)
 
     def _load_json(self, path, default):
         if path.exists():
@@ -249,11 +281,11 @@ class BaseView(ctk.CTkFrame):
         self.grid_columnconfigure(0, weight=1)
 
     def create_header(self):
-        header = ctk.CTkFrame(self, fg_color=OOT_THEME["panel"], corner_radius=18, border_width=1, border_color=OOT_THEME["gold"])
+        header = ctk.CTkFrame(self, fg_color=CURRENT_THEME["panel"], corner_radius=18, border_width=1, border_color=CURRENT_THEME["gold"])
         header.grid(row=0, column=0, sticky="ew", padx=18, pady=(18, 12))
         header.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(header, text=self.title, font=ctk.CTkFont(size=28, weight="bold"), text_color=OOT_THEME["gold"]).grid(row=0, column=0, sticky="w", padx=18, pady=(14, 2))
-        ctk.CTkLabel(header, text=self.subtitle, font=ctk.CTkFont(size=13), text_color=OOT_THEME["text"]).grid(row=1, column=0, sticky="w", padx=18, pady=(0, 14))
+        ctk.CTkLabel(header, text=self.title, font=ctk.CTkFont(size=28, weight="bold"), text_color=CURRENT_THEME["gold"]).grid(row=0, column=0, sticky="w", padx=18, pady=(14, 2))
+        ctk.CTkLabel(header, text=self.subtitle, font=ctk.CTkFont(size=13), text_color=CURRENT_THEME["text"]).grid(row=1, column=0, sticky="w", padx=18, pady=(0, 14))
         return header
 
 
@@ -273,12 +305,12 @@ class DashboardView(BaseView):
         controls.grid(row=1, column=0, sticky="ew", padx=18, pady=(0, 12))
 
         self.filter_var = ctk.StringVar(value="Todos")
-        self.segment = ctk.CTkSegmentedButton(controls, values=["Todos", "Disponibles", "Usados", "XML"], variable=self.filter_var, command=lambda _: self.refresh(), selected_color=OOT_THEME["gold"], selected_hover_color=OOT_THEME["gold_hover"], unselected_color=OOT_THEME["panel_alt"], unselected_hover_color=OOT_THEME["panel"])
+        self.segment = ctk.CTkSegmentedButton(controls, values=["Todos", "Disponibles", "Usados", "XML"], variable=self.filter_var, command=lambda _: self.refresh(), selected_color=CURRENT_THEME["gold"], selected_hover_color=CURRENT_THEME["gold_hover"], unselected_color=CURRENT_THEME["panel_alt"], unselected_hover_color=CURRENT_THEME["panel"])
         self.segment.pack(anchor="w")
-        ctk.CTkButton(controls, text="Exportar Dashboard", width=150, fg_color=OOT_THEME["panel_alt"], hover_color=OOT_THEME["gold_hover"], command=self.export_dashboard_snapshot).pack(anchor="e")
+        ctk.CTkButton(controls, text="Exportar Dashboard", width=150, fg_color=CURRENT_THEME["panel_alt"], hover_color=CURRENT_THEME["gold_hover"], command=self.export_dashboard_snapshot).pack(anchor="e")
         period_row = ctk.CTkFrame(controls, fg_color="transparent")
         period_row.pack(anchor="w", pady=(8, 0))
-        ctk.CTkLabel(period_row, text="Periodo:", text_color=OOT_THEME["muted"]).pack(side="left", padx=(0, 8))
+        ctk.CTkLabel(period_row, text="Periodo:", text_color=CURRENT_THEME["muted"]).pack(side="left", padx=(0, 8))
         self.period_var = ctk.StringVar(value="Todo")
         self.custom_range = None
         self.period_segment = ctk.CTkSegmentedButton(
@@ -286,20 +318,20 @@ class DashboardView(BaseView):
             values=["Todo", "Hoy", "7d", "30d", "90d", "Rango"],
             variable=self.period_var,
             command=self.on_period_change,
-            selected_color=OOT_THEME["gold"],
-            selected_hover_color=OOT_THEME["gold_hover"],
-            unselected_color=OOT_THEME["panel_alt"],
-            unselected_hover_color=OOT_THEME["panel"],
+            selected_color=CURRENT_THEME["gold"],
+            selected_hover_color=CURRENT_THEME["gold_hover"],
+            unselected_color=CURRENT_THEME["panel_alt"],
+            unselected_hover_color=CURRENT_THEME["panel"],
         )
         self.period_segment.pack(side="left")
-        ctk.CTkLabel(period_row, text="Desde:", text_color=OOT_THEME["muted"]).pack(side="left", padx=(14, 4))
+        ctk.CTkLabel(period_row, text="Desde:", text_color=CURRENT_THEME["muted"]).pack(side="left", padx=(14, 4))
         self.from_date_entry = ctk.CTkEntry(period_row, width=105, placeholder_text="YYYY-MM-DD")
         self.from_date_entry.pack(side="left", padx=(0, 6))
-        ctk.CTkLabel(period_row, text="Hasta:", text_color=OOT_THEME["muted"]).pack(side="left", padx=(4, 4))
+        ctk.CTkLabel(period_row, text="Hasta:", text_color=CURRENT_THEME["muted"]).pack(side="left", padx=(4, 4))
         self.to_date_entry = ctk.CTkEntry(period_row, width=105, placeholder_text="YYYY-MM-DD")
         self.to_date_entry.pack(side="left", padx=(0, 6))
-        ctk.CTkButton(period_row, text="Aplicar rango", width=110, fg_color=OOT_THEME["panel_alt"], hover_color=OOT_THEME["gold_hover"], command=self.apply_custom_range).pack(side="left", padx=(4, 0))
-        ctk.CTkButton(period_row, text="Limpiar", width=80, fg_color=OOT_THEME["panel_alt"], hover_color=OOT_THEME["panel"], command=self.clear_custom_range).pack(side="left", padx=(6, 0))
+        ctk.CTkButton(period_row, text="Aplicar rango", width=110, fg_color=CURRENT_THEME["panel_alt"], hover_color=CURRENT_THEME["gold_hover"], command=self.apply_custom_range).pack(side="left", padx=(4, 0))
+        ctk.CTkButton(period_row, text="Limpiar", width=80, fg_color=CURRENT_THEME["panel_alt"], hover_color=CURRENT_THEME["panel"], command=self.clear_custom_range).pack(side="left", padx=(6, 0))
 
         metrics = ctk.CTkFrame(self, fg_color="transparent")
         metrics.grid(row=2, column=0, sticky="ew", padx=18)
@@ -310,7 +342,7 @@ class DashboardView(BaseView):
         self._metric_card(metrics, 1, "Reliquias Activas", "0", "pieces")
         self._metric_card(metrics, 2, "Participación Rubro", "0%", "share")
         self._metric_card(metrics, 3, "Ticket Promedio", "$0.00", "avg")
-        self.compare_label = ctk.CTkLabel(self, text="Comparativo: sin periodo seleccionado.", text_color=OOT_THEME["muted"])
+        self.compare_label = ctk.CTkLabel(self, text="Comparativo: sin periodo seleccionado.", text_color=CURRENT_THEME["muted"])
         self.compare_label.grid(row=2, column=0, sticky="e", padx=24, pady=(94, 0))
 
         content = ctk.CTkFrame(self, fg_color="transparent")
@@ -318,19 +350,19 @@ class DashboardView(BaseView):
         content.grid_columnconfigure((0, 1), weight=1)
         content.grid_rowconfigure(0, weight=1)
 
-        chart_card = ctk.CTkFrame(content, fg_color=OOT_THEME["panel"], corner_radius=18, border_width=1, border_color=OOT_THEME["gold"])
+        chart_card = ctk.CTkFrame(content, fg_color=CURRENT_THEME["panel"], corner_radius=18, border_width=1, border_color=CURRENT_THEME["gold"])
         chart_card.grid(row=0, column=0, sticky="nsew", padx=(0, 9))
         chart_card.grid_rowconfigure(1, weight=1)
         chart_card.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(chart_card, text="Mapa de Sucursales", font=ctk.CTkFont(size=18, weight="bold"), text_color=OOT_THEME["gold"]).grid(row=0, column=0, sticky="w", padx=18, pady=(14, 6))
+        ctk.CTkLabel(chart_card, text="Mapa de Sucursales", font=ctk.CTkFont(size=18, weight="bold"), text_color=CURRENT_THEME["gold"]).grid(row=0, column=0, sticky="w", padx=18, pady=(14, 6))
         self.chart_container = ctk.CTkFrame(chart_card, fg_color="transparent")
         self.chart_container.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 12))
 
-        summary_card = ctk.CTkFrame(content, fg_color=OOT_THEME["panel"], corner_radius=18, border_width=1, border_color=OOT_THEME["gold"])
+        summary_card = ctk.CTkFrame(content, fg_color=CURRENT_THEME["panel"], corner_radius=18, border_width=1, border_color=CURRENT_THEME["gold"])
         summary_card.grid(row=0, column=1, sticky="nsew", padx=(9, 0))
         summary_card.grid_rowconfigure(1, weight=1)
         summary_card.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(summary_card, text="Resumen por Sucursal", font=ctk.CTkFont(size=18, weight="bold"), text_color=OOT_THEME["gold"]).grid(row=0, column=0, sticky="w", padx=18, pady=(14, 6))
+        ctk.CTkLabel(summary_card, text="Resumen por Sucursal", font=ctk.CTkFont(size=18, weight="bold"), text_color=CURRENT_THEME["gold"]).grid(row=0, column=0, sticky="w", padx=18, pady=(14, 6))
         self.summary_tree = self.app.create_treeview(summary_card, [
             ("sucursal", "Sucursal", 160),
             ("cantidad", "Cantidad", 100),
@@ -340,10 +372,10 @@ class DashboardView(BaseView):
         self.summary_tree.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 12))
 
     def _metric_card(self, parent, column, title, value, key):
-        card = ctk.CTkFrame(parent, fg_color=OOT_THEME["panel_alt"], corner_radius=16, border_width=1, border_color=OOT_THEME["gold"])
+        card = ctk.CTkFrame(parent, fg_color=CURRENT_THEME["panel_alt"], corner_radius=16, border_width=1, border_color=CURRENT_THEME["gold"])
         card.grid(row=0, column=column, sticky="ew", padx=6)
-        ctk.CTkLabel(card, text=title, text_color=OOT_THEME["muted"], font=ctk.CTkFont(size=13)).pack(anchor="w", padx=16, pady=(12, 0))
-        label = ctk.CTkLabel(card, text=value, text_color=OOT_THEME["text"], font=ctk.CTkFont(size=24, weight="bold"))
+        ctk.CTkLabel(card, text=title, text_color=CURRENT_THEME["muted"], font=ctk.CTkFont(size=13)).pack(anchor="w", padx=16, pady=(12, 0))
+        label = ctk.CTkLabel(card, text=value, text_color=CURRENT_THEME["text"], font=ctk.CTkFont(size=24, weight="bold"))
         label.pack(anchor="w", padx=16, pady=(2, 14))
         self.metric_labels[key] = label
 
@@ -375,11 +407,11 @@ class DashboardView(BaseView):
 
         self.metric_labels["share"].configure(text=f"{share:.1f}%")
         if share < 25:
-            self.metric_labels["share"].configure(text_color=OOT_THEME["danger"])
+            self.metric_labels["share"].configure(text_color=CURRENT_THEME["danger"])
         elif share < 60:
-            self.metric_labels["share"].configure(text_color=OOT_THEME["warning"])
+            self.metric_labels["share"].configure(text_color=CURRENT_THEME["warning"])
         else:
-            self.metric_labels["share"].configure(text_color=OOT_THEME["emerald"])
+            self.metric_labels["share"].configure(text_color=CURRENT_THEME["emerald"])
 
         self.metric_labels["avg"].configure(text=f"${avg_ticket:,.2f}")
         self._update_period_comparison(inventory, filtro, total_money, total_pieces)
@@ -512,7 +544,7 @@ class DashboardView(BaseView):
     def _update_period_comparison(self, inventory, filtro, current_money, current_pieces):
         bounds = self._get_period_bounds()
         if not bounds:
-            self.compare_label.configure(text="Comparativo: selecciona Hoy/7d/30d/90d/Rango.", text_color=OOT_THEME["muted"])
+            self.compare_label.configure(text="Comparativo: selecciona Hoy/7d/30d/90d/Rango.", text_color=CURRENT_THEME["muted"])
             return
         start, end = bounds
         duration = end - start
@@ -540,7 +572,7 @@ class DashboardView(BaseView):
         delta_pieces = pct_delta(current_pieces, prev_pieces)
         money_sign = "+" if delta_money >= 0 else ""
         pieces_sign = "+" if delta_pieces >= 0 else ""
-        color = OOT_THEME["emerald"] if delta_money >= 0 and delta_pieces >= 0 else OOT_THEME["warning"]
+        color = CURRENT_THEME["emerald"] if delta_money >= 0 and delta_pieces >= 0 else CURRENT_THEME["warning"]
         self.compare_label.configure(
             text=f"Vs periodo anterior → Piezas: {pieces_sign}{delta_pieces:.1f}% · Total: {money_sign}{delta_money:.1f}%",
             text_color=color,
@@ -566,8 +598,8 @@ class DashboardView(BaseView):
             filters = {
                 "Filtro estado": self.filter_var.get(),
                 "Periodo": self.period_var.get(),
-                "Desde": self.from_var.get() or "-",
-                "Hasta": self.to_var.get() or "-",
+                "Desde": self.from_date_entry.get() or "-",
+                "Hasta": self.to_date_entry.get() or "-",
                 "Exportado": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             }
             rows = []
@@ -588,6 +620,9 @@ class DashboardView(BaseView):
             self.app.log(f"Dashboard exportado: {out_path}")
             messagebox.showinfo("Exportación completada", f"Dashboard exportado en:\n{out_path}")
         except Exception as exc:
+            self.app.log(f"Error exportando dashboard: {exc}")
+            import traceback
+            self.app.log(traceback.format_exc())
             messagebox.showerror("Error exportando", f"No se pudo exportar dashboard.\n\n{exc}")
 
     def _export_dashboard_pdf(self, out_path, kpi_df, summary_df, filters_df):
@@ -635,20 +670,20 @@ class DashboardView(BaseView):
         if self.chart_canvas:
             self.chart_canvas.get_tk_widget().destroy()
 
-        fig = Figure(figsize=(5.4, 4.2), dpi=100, facecolor=OOT_THEME["panel"])
+        fig = Figure(figsize=(5.4, 4.2), dpi=100, facecolor=CURRENT_THEME["panel"])
         ax = fig.add_subplot(111)
-        ax.set_facecolor(OOT_THEME["panel"])
+        ax.set_facecolor(CURRENT_THEME["panel"])
 
         if not total_df.empty and "SUCURSAL" in total_df.columns:
             counts_all = total_df["SUCURSAL"].fillna("SIN SUCURSAL").value_counts()
             counts = counts_all.head(5)
             if len(counts_all) > 5:
                 counts.loc["OTROS"] = counts_all.iloc[5:].sum()
-            colors = [OOT_THEME["gold"], OOT_THEME["forest"], OOT_THEME["emerald"], OOT_THEME["sky"], OOT_THEME["warning"], OOT_THEME["danger"]]
-            ax.pie(counts.values, labels=counts.index, autopct="%1.1f%%", startangle=90, colors=colors[: len(counts)], textprops={"color": OOT_THEME["text"], "fontsize": 10})
-            ax.set_title("Distribución por Sucursal (Top 5 + Otros)", color=OOT_THEME["gold"], fontsize=14)
+            colors = [CURRENT_THEME["gold"], CURRENT_THEME["forest"], CURRENT_THEME["emerald"], CURRENT_THEME["sky"], CURRENT_THEME["warning"], CURRENT_THEME["danger"]]
+            ax.pie(counts.values, labels=counts.index, autopct="%1.1f%%", startangle=90, colors=colors[: len(counts)], textprops={"color": CURRENT_THEME["text"], "fontsize": 10})
+            ax.set_title("Distribución por Sucursal (Top 5 + Otros)", color=CURRENT_THEME["gold"], fontsize=14)
         else:
-            ax.text(0.5, 0.5, "No hay datos aún", color=OOT_THEME["text"], ha="center", va="center")
+            ax.text(0.5, 0.5, "No hay datos aún", color=CURRENT_THEME["text"], ha="center", va="center")
             ax.axis("off")
 
         fig.tight_layout()
@@ -669,30 +704,30 @@ class InventoryView(BaseView):
         controls.grid(row=1, column=0, sticky="ew", padx=18, pady=(0, 12))
         controls.grid_columnconfigure(3, weight=1)
 
-        self.sucursal_opt = MultiSelectMenu(controls, title="Sucursal", values=[], command=self.refresh, fg_color=OOT_THEME["panel_alt"], hover_color=OOT_THEME["panel"])
+        self.sucursal_opt = MultiSelectMenu(controls, title="Sucursal", values=[], command=self.refresh, fg_color=CURRENT_THEME["panel_alt"], hover_color=CURRENT_THEME["panel"])
         self.sucursal_opt.grid(row=0, column=0, padx=(0, 10), sticky="w")
 
-        self.modelo_opt = MultiSelectMenu(controls, title="Modelo", values=[], command=self.refresh, fg_color=OOT_THEME["panel_alt"], hover_color=OOT_THEME["panel"])
+        self.modelo_opt = MultiSelectMenu(controls, title="Modelo", values=[], command=self.refresh, fg_color=CURRENT_THEME["panel_alt"], hover_color=CURRENT_THEME["panel"])
         self.modelo_opt.grid(row=0, column=1, padx=(0, 10), sticky="w")
 
-        ctk.CTkLabel(controls, text="Buscar:", text_color=OOT_THEME["text"]).grid(row=0, column=2, padx=(0, 10), sticky="w")
+        ctk.CTkLabel(controls, text="Buscar:", text_color=CURRENT_THEME["text"]).grid(row=0, column=2, padx=(0, 10), sticky="w")
         self.search_entry = ctk.CTkEntry(controls, placeholder_text="serie, color...")
         self.search_entry.grid(row=0, column=3, sticky="ew")
         self.search_entry.bind("<KeyRelease>", lambda _e: self.refresh())
-        ctk.CTkButton(controls, text="X Filtros", fg_color=OOT_THEME["danger"], hover_color=OOT_THEME["danger_hover"], command=self.clear_filters).grid(row=0, column=4, padx=(10, 0))
-        self.active_filters_label = ctk.CTkLabel(controls, text="Filtros activos: 0", text_color=OOT_THEME["muted"])
+        ctk.CTkButton(controls, text="X Filtros", fg_color=CURRENT_THEME["danger"], hover_color=CURRENT_THEME["danger_hover"], command=self.clear_filters).grid(row=0, column=4, padx=(10, 0))
+        self.active_filters_label = ctk.CTkLabel(controls, text="Filtros activos: 0", text_color=CURRENT_THEME["muted"])
         self.active_filters_label.grid(row=0, column=8, padx=(12, 0), sticky="e")
 
-        ctk.CTkButton(controls, text="Guardar Snapshot", fg_color=OOT_THEME["gold"], hover_color=OOT_THEME["gold_hover"], text_color="#221A0C", command=self.save_snapshot).grid(row=0, column=5, padx=(10, 0))
-        ctk.CTkButton(controls, text="Exportar Vista", fg_color=OOT_THEME["emerald"], hover_color=OOT_THEME["forest_hover"], command=self.export_view).grid(row=0, column=6, padx=10)
-        ctk.CTkButton(controls, text="Recargar", fg_color=OOT_THEME["forest"], hover_color=OOT_THEME["forest_hover"], command=lambda: self.app.refresh_data(force=True)).grid(row=0, column=7)
+        ctk.CTkButton(controls, text="Guardar Snapshot", fg_color=CURRENT_THEME["gold"], hover_color=CURRENT_THEME["gold_hover"], text_color="#221A0C", command=self.save_snapshot).grid(row=0, column=5, padx=(10, 0))
+        ctk.CTkButton(controls, text="Exportar Vista", fg_color=CURRENT_THEME["emerald"], hover_color=CURRENT_THEME["forest_hover"], command=self.export_view).grid(row=0, column=6, padx=10)
+        ctk.CTkButton(controls, text="Recargar", fg_color=CURRENT_THEME["forest"], hover_color=CURRENT_THEME["forest_hover"], command=lambda: self.app.refresh_data(force=True)).grid(row=0, column=7)
 
-        totals_frame = ctk.CTkFrame(self, fg_color=OOT_THEME["panel_alt"], corner_radius=8)
+        totals_frame = ctk.CTkFrame(self, fg_color=CURRENT_THEME["panel_alt"], corner_radius=8)
         totals_frame.grid(row=2, column=0, sticky="ew", padx=18)
-        self.lbl_totals = ctk.CTkLabel(totals_frame, text="0 piezas visibles · Total: $0.00", text_color=OOT_THEME["gold"], font=ctk.CTkFont(weight="bold"))
+        self.lbl_totals = ctk.CTkLabel(totals_frame, text="0 piezas visibles · Total: $0.00", text_color=CURRENT_THEME["gold"], font=ctk.CTkFont(weight="bold"))
         self.lbl_totals.pack(padx=14, pady=6, anchor="e")
 
-        self.tabview = ctk.CTkTabview(self, fg_color=OOT_THEME["panel"], segmented_button_selected_color=OOT_THEME["gold"], segmented_button_selected_hover_color=OOT_THEME["gold_hover"], segmented_button_unselected_color=OOT_THEME["panel_alt"], command=self.refresh_totals)
+        self.tabview = ctk.CTkTabview(self, fg_color=CURRENT_THEME["panel"], segmented_button_selected_color=CURRENT_THEME["gold"], segmented_button_selected_hover_color=CURRENT_THEME["gold_hover"], segmented_button_unselected_color=CURRENT_THEME["panel_alt"], command=self.refresh_totals)
         self.tabview.grid(row=3, column=0, sticky="nsew", padx=18, pady=(0, 18))
         self.trees = {}
         for tab_name in ["Disponibles", "Usados", "XML"]:
@@ -763,7 +798,7 @@ class InventoryView(BaseView):
             active += 1
         if self.search_entry.get().strip():
             active += 1
-        color = OOT_THEME["gold"] if active > 0 else OOT_THEME["muted"]
+        color = CURRENT_THEME["gold"] if active > 0 else CURRENT_THEME["muted"]
         self.active_filters_label.configure(text=f"Filtros activos: {active}", text_color=color)
 
     def save_snapshot(self):
@@ -872,7 +907,7 @@ class GeneratorView(BaseView):
         self.preview_df = pd.DataFrame()
         self.create_header()
 
-        top = ctk.CTkFrame(self, fg_color=OOT_THEME["panel"], corner_radius=18, border_width=1, border_color=OOT_THEME["gold"])
+        top = ctk.CTkFrame(self, fg_color=CURRENT_THEME["panel"], corner_radius=18, border_width=1, border_color=CURRENT_THEME["gold"])
         top.grid(row=1, column=0, sticky="ew", padx=18, pady=(0, 12))
         for i in range(4):
             top.grid_columnconfigure(i, weight=1)
@@ -896,8 +931,8 @@ class GeneratorView(BaseView):
             company_tools,
             text="Recargar",
             width=90,
-            fg_color=OOT_THEME["panel_alt"],
-            hover_color=OOT_THEME["gold_hover"],
+            fg_color=CURRENT_THEME["panel_alt"],
+            hover_color=CURRENT_THEME["gold_hover"],
             command=self.refresh_company_options,
         ).pack(side="left", padx=(6, 0))
         self.company_combo.set("Elegir empresa CSF...")
@@ -905,34 +940,36 @@ class GeneratorView(BaseView):
 
         filter_frame = ctk.CTkFrame(top, fg_color="transparent")
         filter_frame.grid(row=1, column=0, columnspan=4, sticky="ew", padx=10, pady=10)
-        self.include_children = ctk.CTkSwitch(filter_frame, text="Incluir infantiles", progress_color=OOT_THEME["gold"], command=self._update_active_filters_badge)
+        self.include_children = ctk.CTkSwitch(filter_frame, text="Incluir infantiles", progress_color=CURRENT_THEME["gold"], command=self._update_active_filters_badge)
         self.include_children.pack(side="left", padx=12)
-        self.include_motor = ctk.CTkSwitch(filter_frame, text="Incluir motocicletas", progress_color=OOT_THEME["gold"], command=self._update_active_filters_badge)
+        self.include_motor = ctk.CTkSwitch(filter_frame, text="Incluir motocicletas", progress_color=CURRENT_THEME["gold"], command=self._update_active_filters_badge)
         self.include_motor.pack(side="left", padx=12)
 
-        ctk.CTkLabel(filter_frame, text="Sucursal:", text_color=OOT_THEME["muted"]).pack(side="left", padx=(20, 5))
-        self.sucursal_opt = MultiSelectMenu(filter_frame, title="Seleccionar", values=[], command=self.refresh, fg_color=OOT_THEME["panel_alt"], hover_color=OOT_THEME["panel"])
+        ctk.CTkLabel(filter_frame, text="Sucursal:", text_color=CURRENT_THEME["muted"]).pack(side="left", padx=(20, 5))
+        self.sucursal_opt = MultiSelectMenu(filter_frame, title="Seleccionar", values=[], command=self.refresh, fg_color=CURRENT_THEME["panel_alt"], hover_color=CURRENT_THEME["panel"])
         self.sucursal_opt.pack(side="left", padx=5)
 
-        ctk.CTkLabel(filter_frame, text="Modelo:", text_color=OOT_THEME["muted"]).pack(side="left", padx=(20, 5))
-        self.modelo_opt = MultiSelectMenu(filter_frame, title="Seleccionar", values=[], command=self.refresh, fg_color=OOT_THEME["panel_alt"], hover_color=OOT_THEME["panel"])
+        ctk.CTkLabel(filter_frame, text="Modelo:", text_color=CURRENT_THEME["muted"]).pack(side="left", padx=(20, 5))
+        self.modelo_opt = MultiSelectMenu(filter_frame, title="Seleccionar", values=[], command=self.refresh, fg_color=CURRENT_THEME["panel_alt"], hover_color=CURRENT_THEME["panel"])
         self.modelo_opt.pack(side="left", padx=5)
-        ctk.CTkButton(filter_frame, text="X Filtros", width=90, fg_color=OOT_THEME["danger"], hover_color=OOT_THEME["danger_hover"], command=self.clear_filters).pack(side="left", padx=(10, 0))
-        self.active_filters_label = ctk.CTkLabel(filter_frame, text="Filtros activos: 0", text_color=OOT_THEME["muted"])
+        ctk.CTkButton(filter_frame, text="X Filtros", width=90, fg_color=CURRENT_THEME["danger"], hover_color=CURRENT_THEME["danger_hover"], command=self.clear_filters).pack(side="left", padx=(10, 0))
+        self.active_filters_label = ctk.CTkLabel(filter_frame, text="Filtros activos: 0", text_color=CURRENT_THEME["muted"])
         self.active_filters_label.pack(side="left", padx=(10, 0))
 
         controls = ctk.CTkFrame(top, fg_color="transparent")
         controls.grid(row=2, column=0, columnspan=4, sticky="ew", padx=10, pady=(0, 12))
-        ctk.CTkButton(controls, text="Previsualizar combinación", fg_color=OOT_THEME["gold"], hover_color=OOT_THEME["gold_hover"], text_color="#221A0C", command=self.calculate_preview).pack(side="left", padx=(0, 10))
-        ctk.CTkButton(controls, text="Exportar machote", fg_color=OOT_THEME["forest"], hover_color=OOT_THEME["forest_hover"], command=self.export_machote).pack(side="left")
+        ctk.CTkButton(controls, text="Previsualizar combinación", fg_color=CURRENT_THEME["gold"], hover_color=CURRENT_THEME["gold_hover"], text_color="#221A0C", command=self.calculate_preview).pack(side="left", padx=(0, 10))
+        ctk.CTkButton(controls, text="Exportar machote", fg_color=CURRENT_THEME["forest"], hover_color=CURRENT_THEME["forest_hover"], command=self.export_machote).pack(side="left")
 
-        preview_card = ctk.CTkFrame(self, fg_color=OOT_THEME["panel"], corner_radius=18, border_width=1, border_color=OOT_THEME["gold"])
+        ctk.CTkButton(controls, text="Importar Machote Externo", fg_color=CURRENT_THEME["sky"], hover_color="#4F7C7A", command=self.import_external_machote).pack(side="right", padx=(10, 0))
+
+        preview_card = ctk.CTkFrame(self, fg_color=CURRENT_THEME["panel"], corner_radius=18, border_width=1, border_color=CURRENT_THEME["gold"])
         preview_card.grid(row=2, column=0, sticky="nsew", padx=18, pady=(0, 18))
         preview_card.grid_rowconfigure(1, weight=1)
         preview_card.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(2, weight=1)
 
-        self.preview_label = ctk.CTkLabel(preview_card, text="Aún no se ha invocado una combinación.", text_color=OOT_THEME["text"], font=ctk.CTkFont(size=16, weight="bold"))
+        self.preview_label = ctk.CTkLabel(preview_card, text="Aún no se ha invocado una combinación.", text_color=CURRENT_THEME["text"], font=ctk.CTkFont(size=16, weight="bold"))
         self.preview_label.grid(row=0, column=0, sticky="w", padx=18, pady=(14, 8))
         self.preview_tree = self.app.create_treeview(preview_card, [
             ("sucursal", "Sucursal", 110),
@@ -987,7 +1024,7 @@ class GeneratorView(BaseView):
         self.preview_df = None
         for item in self.preview_tree.get_children():
             self.preview_tree.delete(item)
-        self.preview_label.configure(text="Vista previa vacía. Define monto y filtros para consultar.", text_color=OOT_THEME["muted"])
+        self.preview_label.configure(text="Vista previa vacía. Define monto y filtros para consultar.", text_color=CURRENT_THEME["muted"])
         self.refresh()
 
     def _update_active_filters_badge(self):
@@ -1000,13 +1037,13 @@ class GeneratorView(BaseView):
             active += 1
         if self.include_motor.get() == 1:
             active += 1
-        color = OOT_THEME["gold"] if active > 0 else OOT_THEME["muted"]
+        color = CURRENT_THEME["gold"] if active > 0 else CURRENT_THEME["muted"]
         self.active_filters_label.configure(text=f"Filtros activos: {active}", text_color=color)
 
     def _entry(self, parent, row, column, label, value=""):
         frame = ctk.CTkFrame(parent, fg_color="transparent")
         frame.grid(row=row, column=column, sticky="ew", padx=10, pady=(12, 0))
-        ctk.CTkLabel(frame, text=label, text_color=OOT_THEME["muted"]).pack(anchor="w")
+        ctk.CTkLabel(frame, text=label, text_color=CURRENT_THEME["muted"]).pack(anchor="w")
         entry = ctk.CTkEntry(frame)
         entry.pack(fill="x", pady=(4, 0))
         if value:
@@ -1052,7 +1089,7 @@ class GeneratorView(BaseView):
         if not inventory:
             return
 
-        self.preview_label.configure(text="Calculando combinaciones posibles...", text_color=OOT_THEME["warning"])
+        self.preview_label.configure(text="Calculando combinaciones posibles...", text_color=CURRENT_THEME["warning"])
         for item in self.preview_tree.get_children():
             self.preview_tree.delete(item)
 
@@ -1089,7 +1126,7 @@ class GeneratorView(BaseView):
 
         total = pd.to_numeric(preview.get("TOTAL", pd.Series(dtype=float)), errors="coerce").fillna(0).sum() if not preview.empty else 0
         diff = abs(total - target)
-        self.preview_label.configure(text=f"Resultado: {len(preview)} piezas · {self.app.money(total)} · diferencia {self.app.money(diff)}", text_color=OOT_THEME["text"])
+        self.preview_label.configure(text=f"Resultado: {len(preview)} piezas · {self.app.money(total)} · diferencia {self.app.money(diff)}", text_color=CURRENT_THEME["text"])
 
         for _, row in preview.iterrows():
             self.preview_tree.insert("", "end", values=(
@@ -1103,7 +1140,7 @@ class GeneratorView(BaseView):
 
     def _calculate_error(self, exc):
         import traceback
-        self.preview_label.configure(text="Error calculando vista previa.", text_color=OOT_THEME["danger"])
+        self.preview_label.configure(text="Error calculando vista previa.", text_color=CURRENT_THEME["danger"])
         self.app.log(f"Error en simulación:\n{traceback.format_exc()}")
         messagebox.showerror("Error calculando", f"No se pudo generar la vista previa.\n\n{exc}")
 
@@ -1118,7 +1155,7 @@ class GeneratorView(BaseView):
         target = float(self.amount_entry.get().replace(",", "").strip())
 
         self.app.log("Forjando machote en segundo plano...")
-        self.preview_label.configure(text="Generando Excel y actualizando inventario...", text_color=OOT_THEME["warning"])
+        self.preview_label.configure(text="Generando Excel y actualizando inventario...", text_color=CURRENT_THEME["warning"])
 
         def _task():
             try:
@@ -1136,7 +1173,7 @@ class GeneratorView(BaseView):
         self.app.run_in_thread(_task)
 
     def _export_success(self, route, file_name, inventory_path, company, rfc, account):
-        self.preview_label.configure(text="Machote forjado con éxito.", text_color=OOT_THEME["emerald"])
+        self.preview_label.configure(text="Machote forjado con éxito.", text_color=CURRENT_THEME["emerald"])
         self.app.app_state.last_generated_file = route
         self.app.app_state.record_event(
             "machote",
@@ -1157,9 +1194,53 @@ class GeneratorView(BaseView):
 
     def _export_error(self, exc):
         import traceback
-        self.preview_label.configure(text="Error forjando machote.", text_color=OOT_THEME["danger"])
+        self.preview_label.configure(text="Error forjando machote.", text_color=CURRENT_THEME["danger"])
         self.app.log(f"Error en exportación:\n{traceback.format_exc()}")
         messagebox.showerror("Error exportando", f"No se pudo exportar el machote.\n\n{exc}")
+
+    def import_external_machote(self):
+        file_path = filedialog.askopenfilename(
+            title="Seleccionar Machote Externo",
+            filetypes=[("Excel", "*.xlsx *.xls")]
+        )
+        if not file_path:
+            return
+
+        self.app.log(f"Procesando machote externo: {file_path}")
+        self.preview_label.configure(text="Cruzando series del machote externo...", text_color=CURRENT_THEME["warning"])
+
+        def _task():
+            try:
+                coincidentes, detectadas = mg.importar_machote_externo(file_path)
+                self.app.after(0, self._import_external_success, coincidentes, detectadas, file_path)
+            except Exception as exc:
+                self.app.after(0, self._import_external_error, exc)
+
+        self.app.run_in_thread(_task)
+
+    def _import_external_success(self, coincidentes, detectadas, file_path):
+        import os
+        filename = os.path.basename(file_path)
+        if coincidentes:
+            self.app.app_state.record_event(
+                "machote_externo",
+                f"Machote externo importado: {filename}",
+                {"archivo": file_path, "series_detectadas": detectadas, "series_coincidentes": len(coincidentes)}
+            )
+            self.app.refresh_data(force=True)
+            self.app.history_view.refresh()
+            self.preview_label.configure(text=f"Importado: {len(coincidentes)}/{detectadas} series coinciden.", text_color=CURRENT_THEME["emerald"])
+            self.app.log(f"Importación de machote externo exitosa. {len(coincidentes)} series marcadas como usadas.")
+            messagebox.showinfo("Importación exitosa", f"Se encontraron {len(coincidentes)} de {detectadas} series del machote.\nFueron movidas a 'USADOS' bajo '{filename}'.")
+        else:
+            self.preview_label.configure(text=f"No hubo coincidencias ({detectadas} detectadas).", text_color=CURRENT_THEME["danger"])
+            messagebox.showwarning("Sin coincidencias", f"Se detectaron {detectadas} series en el Excel,\npero ninguna coincide con el inventario disponible.")
+
+    def _import_external_error(self, exc):
+        import traceback
+        self.preview_label.configure(text="Error importando machote externo.", text_color=CURRENT_THEME["danger"])
+        self.app.log(f"Error en importación externa:\n{traceback.format_exc()}")
+        messagebox.showerror("Error de importación", f"Hubo un error al procesar el machote externo:\n\n{exc}")
 
     # End of Export Machote
 
@@ -1177,7 +1258,7 @@ class ImportView(BaseView):
         self.parse_warnings = []
         self.create_header()
 
-        card = ctk.CTkFrame(self, fg_color=OOT_THEME["panel"], corner_radius=18, border_width=1, border_color=OOT_THEME["gold"])
+        card = ctk.CTkFrame(self, fg_color=CURRENT_THEME["panel"], corner_radius=18, border_width=1, border_color=CURRENT_THEME["gold"])
         card.grid(row=1, column=0, sticky="nsew", padx=18, pady=(0, 18))
         card.grid_rowconfigure(2, weight=1)
         card.grid_columnconfigure(0, weight=1)
@@ -1185,15 +1266,15 @@ class ImportView(BaseView):
 
         top = ctk.CTkFrame(card, fg_color="transparent")
         top.grid(row=0, column=0, sticky="ew", padx=18, pady=(18, 10))
-        ctk.CTkButton(top, text="Elegir PDF", fg_color=OOT_THEME["gold"], hover_color=OOT_THEME["gold_hover"], text_color="#221A0C", command=self.select_pdf).pack(side="left")
-        ctk.CTkButton(top, text="Limpiar selección", fg_color=OOT_THEME["panel_alt"], hover_color=OOT_THEME["panel"], command=self.clear_loaded_pdf).pack(side="left", padx=(10, 0))
-        ctk.CTkButton(top, text="Simular importación", fg_color=OOT_THEME["warning"], hover_color="#A55A18", command=self.simulate_import).pack(side="left", padx=10)
-        ctk.CTkButton(top, text="Ver warnings", fg_color=OOT_THEME["panel_alt"], hover_color=OOT_THEME["panel"], command=self.show_parse_warnings).pack(side="left", padx=(0, 10))
-        ctk.CTkButton(top, text="Importar mercancía", fg_color=OOT_THEME["forest"], hover_color=OOT_THEME["forest_hover"], command=self.import_pdf).pack(side="left", padx=10)
-        ctk.CTkButton(top, text="Deshacer última carga", fg_color=OOT_THEME["danger"], hover_color=OOT_THEME["danger_hover"], command=self.undo_last_import).pack(side="left", padx=10)
-        ctk.CTkLabel(top, textvariable=self.selected_pdf, text_color=OOT_THEME["text"]).pack(side="left", padx=8)
+        ctk.CTkButton(top, text="Elegir PDF", fg_color=CURRENT_THEME["gold"], hover_color=CURRENT_THEME["gold_hover"], text_color="#221A0C", command=self.select_pdf).pack(side="left")
+        ctk.CTkButton(top, text="Limpiar selección", fg_color=CURRENT_THEME["panel_alt"], hover_color=CURRENT_THEME["panel"], command=self.clear_loaded_pdf).pack(side="left", padx=(10, 0))
+        ctk.CTkButton(top, text="Simular importación", fg_color=CURRENT_THEME["warning"], hover_color="#A55A18", command=self.simulate_import).pack(side="left", padx=10)
+        ctk.CTkButton(top, text="Ver warnings", fg_color=CURRENT_THEME["panel_alt"], hover_color=CURRENT_THEME["panel"], command=self.show_parse_warnings).pack(side="left", padx=(0, 10))
+        ctk.CTkButton(top, text="Importar mercancía", fg_color=CURRENT_THEME["forest"], hover_color=CURRENT_THEME["forest_hover"], command=self.import_pdf).pack(side="left", padx=10)
+        ctk.CTkButton(top, text="Deshacer última carga", fg_color=CURRENT_THEME["danger"], hover_color=CURRENT_THEME["danger_hover"], command=self.undo_last_import).pack(side="left", padx=10)
+        ctk.CTkLabel(top, textvariable=self.selected_pdf, text_color=CURRENT_THEME["text"]).pack(side="left", padx=8)
 
-        self.summary_label = ctk.CTkLabel(card, text="Sin PDF seleccionado.", text_color=OOT_THEME["muted"])
+        self.summary_label = ctk.CTkLabel(card, text="Sin PDF seleccionado.", text_color=CURRENT_THEME["muted"])
         self.summary_label.grid(row=1, column=0, sticky="w", padx=18)
 
         self.preview_tree = self.app.create_treeview(card, [
@@ -1277,7 +1358,7 @@ class ImportView(BaseView):
         self.parse_warnings = []
         for item in self.preview_tree.get_children():
             self.preview_tree.delete(item)
-        self.summary_label.configure(text="Selección limpiada. Sin PDF seleccionado.", text_color=OOT_THEME["muted"])
+        self.summary_label.configure(text="Selección limpiada. Sin PDF seleccionado.", text_color=CURRENT_THEME["muted"])
         self.app.log("Selección de PDF limpiada manualmente.")
 
     def show_parse_warnings(self):
@@ -1318,7 +1399,7 @@ class ImportView(BaseView):
             shutil.copy2(backup_path, Path(mg.PATH_INVENTARIO))
             self.app.refresh_data(force=True)
             self.app.history_view.refresh()
-            self.summary_label.configure(text="Última carga revertida con éxito.", text_color=OOT_THEME["emerald"])
+            self.summary_label.configure(text="Última carga revertida con éxito.", text_color=CURRENT_THEME["emerald"])
             self.app.log(f"Carga revertida usando respaldo: {backup_path.name}")
             messagebox.showinfo("Reversión completada", f"Inventario restaurado desde:\n{backup_path}")
         except Exception as exc:
@@ -1358,7 +1439,7 @@ class ImportView(BaseView):
             f"Duplicados estimados: {len(duplicados)}\n"
             f"Advertencias parseo: {len(self.parse_warnings)}"
         )
-        self.summary_label.configure(text=f"Simulación lista: {nuevos} nuevos, {len(duplicados)} duplicados.", text_color=OOT_THEME["gold"])
+        self.summary_label.configure(text=f"Simulación lista: {nuevos} nuevos, {len(duplicados)} duplicados.", text_color=CURRENT_THEME["gold"])
         self.app.log(f"Simulación de carga:\n{detalles}")
         messagebox.showinfo("Simulación de importación", detalles)
 
@@ -1395,12 +1476,12 @@ class ImportView(BaseView):
                 "Se recomienda revisar 'Ver warnings' antes de importar.\n\n¿Deseas continuar?",
             )
             if not proceed:
-                self.summary_label.configure(text="Importación cancelada por warnings.", text_color=OOT_THEME["warning"])
+                self.summary_label.configure(text="Importación cancelada por warnings.", text_color=CURRENT_THEME["warning"])
                 self.app.log("Importación cancelada por usuario tras confirmación reforzada.")
                 return
 
         self.app.log("Iniciando importación en segundo plano...")
-        self.summary_label.configure(text="Importando mercancía, por favor espera...", text_color=OOT_THEME["warning"])
+        self.summary_label.configure(text="Importando mercancía, por favor espera...", text_color=CURRENT_THEME["warning"])
 
         def _task():
             try:
@@ -1421,14 +1502,14 @@ class ImportView(BaseView):
         )
         self.app.refresh_data(force=True)
         self.app.history_view.refresh()
-        self.summary_label.configure(text=f"Carga completa. {len(selected_items)} artículos importados.", text_color=OOT_THEME["emerald"])
+        self.summary_label.configure(text=f"Carga completa. {len(selected_items)} artículos importados.", text_color=CURRENT_THEME["emerald"])
         self.app.log(f"Reporte post-carga: seleccionados={len(selected_items)} warnings_parseo={len(self.parse_warnings)}")
         self.app.log(f"Mercancía importada: {len(selected_items)} piezas desde {len(pdf_paths)} PDF(s).")
         messagebox.showinfo("Carga completada", f"Se guardaron {len(selected_items)} piezas.\nInventario actualizado en:\n\n{output_path}")
 
     def _import_error(self, exc):
         import traceback
-        self.summary_label.configure(text="Error durante la importación.", text_color=OOT_THEME["danger"])
+        self.summary_label.configure(text="Error durante la importación.", text_color=CURRENT_THEME["danger"])
         self.app.log(f"Error importando PDF:\n{traceback.format_exc()}")
         messagebox.showerror("Error importando", f"No se pudo cargar la mercancía.\n\n{exc}")
 
@@ -1441,7 +1522,7 @@ class XMLView(BaseView):
         self.selected_dir = ctk.StringVar(value="")
         self.create_header()
 
-        card = ctk.CTkFrame(self, fg_color=OOT_THEME["panel"], corner_radius=18, border_width=1, border_color=OOT_THEME["gold"])
+        card = ctk.CTkFrame(self, fg_color=CURRENT_THEME["panel"], corner_radius=18, border_width=1, border_color=CURRENT_THEME["gold"])
         card.grid(row=1, column=0, sticky="nsew", padx=18, pady=(0, 18))
         card.grid_rowconfigure(2, weight=1)
         card.grid_columnconfigure(0, weight=1)
@@ -1449,11 +1530,11 @@ class XMLView(BaseView):
 
         top = ctk.CTkFrame(card, fg_color="transparent")
         top.grid(row=0, column=0, sticky="ew", padx=18, pady=(18, 10))
-        ctk.CTkButton(top, text="Elegir carpeta XML", fg_color=OOT_THEME["gold"], hover_color=OOT_THEME["gold_hover"], text_color="#221A0C", command=self.select_dir).pack(side="left")
-        ctk.CTkButton(top, text="Validar y actualizar", fg_color=OOT_THEME["forest"], hover_color=OOT_THEME["forest_hover"], command=self.process_xml).pack(side="left", padx=10)
-        ctk.CTkLabel(top, textvariable=self.selected_dir, text_color=OOT_THEME["text"]).pack(side="left", padx=8)
+        ctk.CTkButton(top, text="Elegir carpeta XML", fg_color=CURRENT_THEME["gold"], hover_color=CURRENT_THEME["gold_hover"], text_color="#221A0C", command=self.select_dir).pack(side="left")
+        ctk.CTkButton(top, text="Validar y actualizar", fg_color=CURRENT_THEME["forest"], hover_color=CURRENT_THEME["forest_hover"], command=self.process_xml).pack(side="left", padx=10)
+        ctk.CTkLabel(top, textvariable=self.selected_dir, text_color=CURRENT_THEME["text"]).pack(side="left", padx=8)
 
-        self.summary_label = ctk.CTkLabel(card, text="Aún no se ha inspeccionado ninguna carpeta.", text_color=OOT_THEME["muted"])
+        self.summary_label = ctk.CTkLabel(card, text="Aún no se ha inspeccionado ninguna carpeta.", text_color=CURRENT_THEME["muted"])
         self.summary_label.grid(row=1, column=0, sticky="w", padx=18)
 
         self.preview_tree = self.app.create_treeview(card, [
@@ -1486,7 +1567,7 @@ class XMLView(BaseView):
             return
 
         self.app.log("Conciliando XMLs en segundo plano...")
-        self.summary_label.configure(text="Cruzando datos Sheikah con el inventario...", text_color=OOT_THEME["warning"])
+        self.summary_label.configure(text="Cruzando datos Sheikah con el inventario...", text_color=CURRENT_THEME["warning"])
 
         def _task():
             try:
@@ -1501,13 +1582,13 @@ class XMLView(BaseView):
         self.app.app_state.record_event("xml", "UUIDs conciliados", {"carpeta": folder, "inventario": output_path})
         self.app.refresh_data(force=True)
         self.app.history_view.refresh()
-        self.summary_label.configure(text="Sincronización de UUID completada.", text_color=OOT_THEME["emerald"])
+        self.summary_label.configure(text="Sincronización de UUID completada.", text_color=CURRENT_THEME["emerald"])
         self.app.log(f"XMLs conciliados desde {folder}")
         messagebox.showinfo("XML conciliados", f"Inventario actualizado en:\n\n{output_path}")
 
     def _process_error(self, exc):
         import traceback
-        self.summary_label.configure(text="Error conciliando XMLs.", text_color=OOT_THEME["danger"])
+        self.summary_label.configure(text="Error conciliando XMLs.", text_color=CURRENT_THEME["danger"])
         self.app.log(f"Error procesando XML:\n{traceback.format_exc()}")
         messagebox.showerror("Error procesando XMLs", f"No se pudo actualizar el inventario con XMLs.\n\n{exc}")
 
@@ -1520,7 +1601,7 @@ class HistoryView(BaseView):
         super().__init__(master, app)
         self.create_header()
         self.grid_rowconfigure(1, weight=1)
-        card = ctk.CTkFrame(self, fg_color=OOT_THEME["panel"], corner_radius=18, border_width=1, border_color=OOT_THEME["gold"])
+        card = ctk.CTkFrame(self, fg_color=CURRENT_THEME["panel"], corner_radius=18, border_width=1, border_color=CURRENT_THEME["gold"])
         card.grid(row=1, column=0, sticky="nsew", padx=18, pady=(0, 18))
         card.grid_rowconfigure(0, weight=1)
         card.grid_columnconfigure(0, weight=1)
@@ -1538,6 +1619,140 @@ class HistoryView(BaseView):
             self.tree.insert("", "end", values=(entry.get("timestamp", ""), entry.get("type", ""), entry.get("summary", "")))
 
 
+class MachoteHistoryView(BaseView):
+    title = "Registro de Machotes"
+    subtitle = "Administra los machotes generados, revierte asignaciones y localiza archivos."
+
+    def __init__(self, master, app):
+        super().__init__(master, app)
+        self.create_header()
+        self.grid_rowconfigure(2, weight=1)
+
+        controls = ctk.CTkFrame(self, fg_color="transparent")
+        controls.grid(row=1, column=0, sticky="ew", padx=18, pady=(0, 12))
+
+        ctk.CTkButton(controls, text="Deshacer Machote Seleccionado", fg_color=CURRENT_THEME["danger"], hover_color=CURRENT_THEME["danger_hover"], command=self.undo_machote).pack(side="left", padx=(0, 10))
+        ctk.CTkButton(controls, text="Abrir Archivo de Machote", fg_color=CURRENT_THEME["sky"], hover_color="#4F7C7A", command=self.open_machote_file).pack(side="left")
+
+        card = ctk.CTkFrame(self, fg_color=CURRENT_THEME["panel"], corner_radius=18, border_width=1, border_color=CURRENT_THEME["gold"])
+        card.grid(row=2, column=0, sticky="nsew", padx=18, pady=(0, 18))
+        card.grid_rowconfigure(0, weight=1)
+        card.grid_columnconfigure(0, weight=1)
+        self.tree = self.app.create_treeview(card, [
+            ("fecha", "Fecha", 160),
+            ("archivo", "Archivo", 450),
+            ("piezas", "Piezas", 100),
+        ])
+        self.tree.grid(row=0, column=0, sticky="nsew", padx=12, pady=12)
+
+    def refresh(self):
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+
+        # Extract machote events from history
+        machotes = [m for m in self.app.app_state.history if m.get("type") in ("machote", "machote_externo")]
+
+        for entry in machotes:
+            details = entry.get("details", {})
+
+            if entry.get("type") == "machote":
+                # Regular generated machote
+                archivo = details.get("archivo", "")
+                piezas = str(details.get("piezas", ""))
+            elif entry.get("type") == "machote_externo":
+                # External imported machote
+                archivo = details.get("archivo", "")
+                piezas = str(details.get("series_coincidentes", ""))
+
+            self.tree.insert("", "end", values=(entry.get("timestamp", ""), archivo, piezas))
+
+    def get_selected_machote(self):
+        selected = self.tree.selection()
+        if not selected:
+            return None
+        item = self.tree.item(selected[0])
+        return item["values"][1]
+
+    def undo_machote(self):
+        archivo = self.get_selected_machote()
+        if not archivo:
+            messagebox.showwarning("Aviso", "Selecciona un machote de la lista para deshacer.")
+            return
+
+        import os
+        filename = os.path.basename(archivo)
+
+        # Check if it's an external machote (prefix EXT:)
+        # We need to find the name used in the db
+        history_entry = next((m for m in self.app.app_state.history if m.get("details", {}).get("archivo") == archivo), None)
+
+        if history_entry and history_entry.get("type") == "machote_externo":
+            db_machote_name = f"EXT: {filename}"
+        else:
+            db_machote_name = filename
+
+        confirm = messagebox.askyesno(
+            "Deshacer Machote",
+            f"¿Estás seguro de que deseas deshacer la asignación para el machote '{db_machote_name}'?\n\nEsto moverá todas las piezas asociadas de 'USADOS' de vuelta a 'DISPONIBLES'."
+        )
+
+        if not confirm:
+            return
+
+        self.app.log(f"Intentando deshacer machote: {db_machote_name}")
+
+        def _task():
+            try:
+                success = mg.deshacer_machote(db_machote_name)
+                self.app.after(0, self._undo_success, success, db_machote_name)
+            except Exception as exc:
+                self.app.after(0, self._undo_error, exc)
+
+        self.app.run_in_thread(_task)
+
+    def _undo_success(self, success, db_machote_name):
+        if success:
+            self.app.app_state.record_event("machote_undo", f"Machote deshecho: {db_machote_name}")
+            self.app.refresh_data(force=True)
+            self.refresh()
+            self.app.log(f"Machote deshecho exitosamente: {db_machote_name}")
+            messagebox.showinfo("Machote Deshecho", f"El machote '{db_machote_name}' ha sido deshecho.\nLas piezas regresaron a DISPONIBLES.")
+        else:
+            self.app.log(f"No se pudo deshacer {db_machote_name} (no se encontraron piezas).")
+            messagebox.showwarning("Sin efecto", f"No se encontraron piezas en el inventario actual asignadas al machote '{db_machote_name}'.")
+
+    def _undo_error(self, exc):
+        import traceback
+        self.app.log(f"Error deshaciendo machote:\n{traceback.format_exc()}")
+        messagebox.showerror("Error", f"No se pudo deshacer el machote.\n\n{exc}")
+
+    def open_machote_file(self):
+        archivo = self.get_selected_machote()
+        if not archivo:
+            messagebox.showwarning("Aviso", "Selecciona un machote de la lista para abrir.")
+            return
+
+        import os
+        import platform
+        import subprocess
+
+        if not os.path.exists(archivo):
+            messagebox.showerror("Archivo no encontrado", f"El archivo ya no existe en la ruta:\n{archivo}")
+            return
+
+        try:
+            if platform.system() == 'Windows':
+                os.startfile(archivo)
+            elif platform.system() == 'Darwin': # macOS
+                subprocess.call(('open', archivo))
+            else: # Linux
+                subprocess.call(('xdg-open', archivo))
+            self.app.log(f"Archivo abierto: {archivo}")
+        except Exception as exc:
+            self.app.log(f"Error abriendo archivo {archivo}: {exc}")
+            messagebox.showerror("Error", f"No se pudo abrir el archivo:\n{exc}")
+
+
 class SettingsView(BaseView):
     title = "Cámara del Sabio"
     subtitle = "Ajustes visuales, nombres por defecto y rutas clave del sistema."
@@ -1545,7 +1760,7 @@ class SettingsView(BaseView):
     def __init__(self, master, app):
         super().__init__(master, app)
         self.create_header()
-        card = ctk.CTkScrollableFrame(self, fg_color=OOT_THEME["panel"], corner_radius=18, border_width=1, border_color=OOT_THEME["gold"])
+        card = ctk.CTkScrollableFrame(self, fg_color=CURRENT_THEME["panel"], corner_radius=18, border_width=1, border_color=CURRENT_THEME["gold"])
         card.grid(row=1, column=0, sticky="nsew", padx=18, pady=(0, 18))
         self.grid_rowconfigure(1, weight=1)
         self.entries = {}
@@ -1565,7 +1780,7 @@ class SettingsView(BaseView):
             frame = ctk.CTkFrame(card, fg_color="transparent")
             frame.grid(row=idx, column=0, sticky="ew", padx=8, pady=6)
             frame.grid_columnconfigure(0, weight=1)
-            ctk.CTkLabel(frame, text=label, text_color=OOT_THEME["muted"]).grid(row=0, column=0, sticky="w")
+            ctk.CTkLabel(frame, text=label, text_color=CURRENT_THEME["muted"]).grid(row=0, column=0, sticky="w")
             entry = ctk.CTkEntry(frame)
             entry.grid(row=1, column=0, sticky="ew", pady=(4, 0))
             entry.insert(0, str(self.app.app_state.config.get(key, "")))
@@ -1573,17 +1788,22 @@ class SettingsView(BaseView):
 
         mode_frame = ctk.CTkFrame(card, fg_color="transparent")
         mode_frame.grid(row=len(fields), column=0, sticky="ew", padx=8, pady=12)
-        ctk.CTkLabel(mode_frame, text="Modo visual", text_color=OOT_THEME["muted"]).pack(anchor="w")
-        self.mode_option = ctk.CTkOptionMenu(mode_frame, values=["Dark", "Light", "System"], command=self.change_mode, fg_color=OOT_THEME["gold"], button_color=OOT_THEME["gold_hover"], text_color="#221A0C")
+        ctk.CTkLabel(mode_frame, text="Modo visual (Requiere Reinicio)", text_color=CURRENT_THEME["muted"]).pack(anchor="w")
+        self.mode_option = ctk.CTkOptionMenu(mode_frame, values=["Dark", "HoneyWhale", "Light", "System"], command=self.change_mode, fg_color=CURRENT_THEME["gold"], button_color=CURRENT_THEME["gold_hover"], text_color="#221A0C")
         self.mode_option.pack(anchor="w", pady=(6, 0))
         self.mode_option.set(self.app.app_state.config.get("theme_mode", "Dark"))
 
-        ctk.CTkButton(card, text="Guardar ajustes", fg_color=OOT_THEME["forest"], hover_color=OOT_THEME["forest_hover"], command=self.save).grid(row=len(fields) + 1, column=0, sticky="w", padx=8, pady=(8, 16))
+        ctk.CTkButton(card, text="Guardar ajustes", fg_color=CURRENT_THEME["forest"], hover_color=CURRENT_THEME["forest_hover"], command=self.save).grid(row=len(fields) + 1, column=0, sticky="w", padx=8, pady=(8, 16))
 
     def change_mode(self, mode):
-        ctk.set_appearance_mode(mode)
+        if mode in ["Dark", "Light", "System"]:
+            ctk.set_appearance_mode(mode)
+        else:
+            ctk.set_appearance_mode("Dark") # Fallback to Dark for HoneyWhale which uses Dark appearance inherently
+
         self.app.app_state.config["theme_mode"] = mode
         self.app.app_state.save_config()
+        messagebox.showinfo("Reinicio Requerido", "Cambiar el modo visual de la aplicación requiere reiniciar para surtir efecto completo.")
 
     def save(self):
         for key, entry in self.entries.items():
@@ -1613,7 +1833,7 @@ class ZeldaApp(ctk.CTk):
         self.title("MACHOTES OF TIME · Hero's Admin Panel")
         self.geometry("1480x900")
         self.minsize(1280, 760)
-        self.configure(fg_color=OOT_THEME["bg"])
+        self.configure(fg_color=CURRENT_THEME["bg"])
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=0)
@@ -1644,7 +1864,7 @@ class ZeldaApp(ctk.CTk):
         style.configure(
             "Treeview",
             background="#162318",
-            foreground=OOT_THEME["text"],
+            foreground=CURRENT_THEME["text"],
             fieldbackground="#162318",
             rowheight=28,
             borderwidth=0,
@@ -1652,34 +1872,34 @@ class ZeldaApp(ctk.CTk):
         )
         style.configure(
             "Treeview.Heading",
-            background=OOT_THEME["gold"],
+            background=CURRENT_THEME["gold"],
             foreground="#241B0B",
             relief="flat",
             font=("Segoe UI", 10, "bold"),
         )
-        style.map("Treeview", background=[("selected", OOT_THEME["forest"])])
+        style.map("Treeview", background=[("selected", CURRENT_THEME["forest"])])
 
     def create_sidebar(self):
         self.sidebar_collapsed = False
-        self.sidebar = ctk.CTkFrame(self, width=270, fg_color=OOT_THEME["panel"], corner_radius=0, border_width=1, border_color=OOT_THEME["gold"])
+        self.sidebar = ctk.CTkFrame(self, width=270, fg_color=CURRENT_THEME["panel"], corner_radius=0, border_width=1, border_color=CURRENT_THEME["gold"])
         self.sidebar.grid(row=0, column=0, rowspan=2, sticky="nsew")
         self.sidebar.grid_rowconfigure(9, weight=1)
 
         self.sidebar_header = ctk.CTkFrame(self.sidebar, fg_color="transparent")
         self.sidebar_header.grid(row=0, column=0, sticky="ew", padx=16, pady=(16, 6))
         self.sidebar_header.grid_columnconfigure(0, weight=1)
-        self.logo_label = ctk.CTkLabel(self.sidebar_header, text=self.app_state.config.get("logo_text", "MACHOTES OF TIME"), text_color=OOT_THEME["gold"], justify="left", font=ctk.CTkFont(size=28, weight="bold"))
+        self.logo_label = ctk.CTkLabel(self.sidebar_header, text=self.app_state.config.get("logo_text", "MACHOTES OF TIME"), text_color=CURRENT_THEME["gold"], justify="left", font=ctk.CTkFont(size=28, weight="bold"))
         self.logo_label.grid(row=0, column=0, sticky="w")
         self.sidebar_toggle_btn = ctk.CTkButton(
             self.sidebar_header,
             text="▲",
             width=42,
-            fg_color=OOT_THEME["panel_alt"],
-            hover_color=OOT_THEME["gold_hover"],
+            fg_color=CURRENT_THEME["panel_alt"],
+            hover_color=CURRENT_THEME["gold_hover"],
             command=self.toggle_sidebar,
         )
         self.sidebar_toggle_btn.grid(row=0, column=1, sticky="e", padx=(8, 0))
-        self.sidebar_subtitle = ctk.CTkLabel(self.sidebar, text="Panel inspirado en Ocarina of Time", text_color=OOT_THEME["text"], font=ctk.CTkFont(size=12))
+        self.sidebar_subtitle = ctk.CTkLabel(self.sidebar, text="Panel inspirado en Ocarina of Time", text_color=CURRENT_THEME["text"], font=ctk.CTkFont(size=12))
         self.sidebar_subtitle.grid(row=1, column=0, sticky="w", padx=20, pady=(0, 20))
 
         self.nav_buttons = {}
@@ -1691,19 +1911,20 @@ class ZeldaApp(ctk.CTk):
             ("carga", "🚢 Carga PDF"),
             ("xml", "🧾 Validar XML"),
             ("history", "📜 Historial"),
+            ("machote_hist", "🗂 Machotes"),
             ("settings", "🔮 Ajustes"),
         ]
         for idx, (key, label) in enumerate(nav_items, start=2):
-            btn = ctk.CTkButton(self.sidebar, text=label, anchor="w", fg_color=OOT_THEME["panel_alt"], hover_color=OOT_THEME["forest_hover"], text_color=OOT_THEME["text"], height=42, command=lambda k=key: self.show_view(k))
+            btn = ctk.CTkButton(self.sidebar, text=label, anchor="w", fg_color=CURRENT_THEME["panel_alt"], hover_color=CURRENT_THEME["forest_hover"], text_color=CURRENT_THEME["text"], height=42, command=lambda k=key: self.show_view(k))
             btn.grid(row=idx, column=0, sticky="ew", padx=18, pady=6)
             self.nav_buttons[key] = btn
             self.nav_labels_full[key] = label
 
-        self.quick = ctk.CTkFrame(self.sidebar, fg_color=OOT_THEME["panel_alt"], corner_radius=16, border_width=1, border_color=OOT_THEME["gold"])
+        self.quick = ctk.CTkFrame(self.sidebar, fg_color=CURRENT_THEME["panel_alt"], corner_radius=16, border_width=1, border_color=CURRENT_THEME["gold"])
         self.quick.grid(row=10, column=0, sticky="ew", padx=18, pady=18)
-        ctk.CTkLabel(self.quick, text="Atajos del Héroe", text_color=OOT_THEME["gold"], font=ctk.CTkFont(size=15, weight="bold")).pack(anchor="w", padx=14, pady=(12, 4))
-        ctk.CTkButton(self.quick, text="Recargar datos", fg_color=OOT_THEME["gold"], hover_color=OOT_THEME["gold_hover"], text_color="#221A0C", command=lambda: self.refresh_data(force=True)).pack(fill="x", padx=12, pady=6)
-        ctk.CTkButton(self.quick, text="Abrir carpeta salida", fg_color=OOT_THEME["forest"], hover_color=OOT_THEME["forest_hover"], text_color=OOT_THEME["text"], command=self.open_output_folder).pack(fill="x", padx=12, pady=(0, 12))
+        ctk.CTkLabel(self.quick, text="Atajos del Héroe", text_color=CURRENT_THEME["gold"], font=ctk.CTkFont(size=15, weight="bold")).pack(anchor="w", padx=14, pady=(12, 4))
+        ctk.CTkButton(self.quick, text="Recargar datos", fg_color=CURRENT_THEME["gold"], hover_color=CURRENT_THEME["gold_hover"], text_color="#221A0C", command=lambda: self.refresh_data(force=True)).pack(fill="x", padx=12, pady=6)
+        ctk.CTkButton(self.quick, text="Abrir carpeta salida", fg_color=CURRENT_THEME["forest"], hover_color=CURRENT_THEME["forest_hover"], text_color=CURRENT_THEME["text"], command=self.open_output_folder).pack(fill="x", padx=12, pady=(0, 12))
 
     def toggle_sidebar(self):
         self.sidebar_collapsed = not self.sidebar_collapsed
@@ -1738,13 +1959,14 @@ class ZeldaApp(ctk.CTk):
             "carga": ImportView(self.main_area, self),
             "xml": XMLView(self.main_area, self),
             "history": HistoryView(self.main_area, self),
+            "machote_hist": MachoteHistoryView(self.main_area, self),
             "settings": SettingsView(self.main_area, self),
         }
         self.history_view = self.views["history"]
 
     def create_log_panel(self):
         self.log_collapsed = False
-        self.log_frame = ctk.CTkFrame(self, fg_color=OOT_THEME["panel"], corner_radius=0, border_width=1, border_color=OOT_THEME["gold"])
+        self.log_frame = ctk.CTkFrame(self, fg_color=CURRENT_THEME["panel"], corner_radius=0, border_width=1, border_color=CURRENT_THEME["gold"])
         self.log_frame.grid(row=1, column=1, sticky="nsew")
         self.log_frame.grid_columnconfigure(0, weight=1)
         self.log_frame.grid_rowconfigure(1, weight=1)
@@ -1752,19 +1974,19 @@ class ZeldaApp(ctk.CTk):
         header = ctk.CTkFrame(self.log_frame, fg_color="transparent")
         header.grid(row=0, column=0, sticky="ew", padx=10, pady=(8, 4))
         header.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(header, text="Sheikah Log", text_color=OOT_THEME["gold"], font=ctk.CTkFont(size=16, weight="bold")).grid(row=0, column=0, sticky="w", padx=4, pady=2)
+        ctk.CTkLabel(header, text="Sheikah Log", text_color=CURRENT_THEME["gold"], font=ctk.CTkFont(size=16, weight="bold")).grid(row=0, column=0, sticky="w", padx=4, pady=2)
         self.log_toggle_btn = ctk.CTkButton(
             header,
             text="◣",
             width=40,
             height=28,
-            fg_color=OOT_THEME["panel_alt"],
-            hover_color=OOT_THEME["forest_hover"],
+            fg_color=CURRENT_THEME["panel_alt"],
+            hover_color=CURRENT_THEME["forest_hover"],
             command=self.toggle_log_panel,
         )
         self.log_toggle_btn.grid(row=0, column=1, sticky="e", padx=(6, 0))
 
-        self.log_text = ctk.CTkTextbox(self.log_frame, height=150, fg_color="#101712", text_color=OOT_THEME["text"], border_width=1, border_color=OOT_THEME["gold"], font=("Consolas", 11))
+        self.log_text = ctk.CTkTextbox(self.log_frame, height=150, fg_color="#101712", text_color=CURRENT_THEME["text"], border_width=1, border_color=CURRENT_THEME["gold"], font=("Consolas", 11))
         self.log_text.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 12))
         self.log("Santuario inicializado. Bienvenido al reino de los machotes.")
 
@@ -1846,7 +2068,7 @@ class ZeldaApp(ctk.CTk):
         self.views[key].grid(row=0, column=0, sticky="nsew")
         for btn_key, btn in self.nav_buttons.items():
             active = btn_key == key
-            btn.configure(fg_color=OOT_THEME["gold"] if active else OOT_THEME["panel_alt"], text_color="#241B0B" if active else OOT_THEME["text"])
+            btn.configure(fg_color=CURRENT_THEME["gold"] if active else CURRENT_THEME["panel_alt"], text_color="#241B0B" if active else CURRENT_THEME["text"])
         if hasattr(self.views[key], "refresh"):
             self.views[key].refresh()
 

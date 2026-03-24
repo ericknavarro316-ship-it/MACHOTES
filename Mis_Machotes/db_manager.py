@@ -204,35 +204,42 @@ def insert_new_items(articulos):
     cursor = conn.cursor()
 
     inserted = 0
-    for art in articulos:
-        try:
-            cursor.execute('''
-            INSERT INTO inventario
-            (estado, sucursal, modelo, modelo_base, color, cantidad, no_serie,
-             d1, p_unitario, subtotal, iva, total, clave_sat, descripcion)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                'DISPONIBLE',
-                art.get('SUCURSAL', ''),
-                art.get('MODELO BASE', ''), # modelo = modelo_base por defecto
-                art.get('MODELO BASE', ''),
-                art.get('COLOR', ''),
-                1,
-                str(art.get('No de SERIE:', '')).strip(),
-                art.get('D1', None),
-                art.get('P. UNITARIO', None),
-                art.get('SUBTOTAL', None),
-                art.get('IVA', None),
-                art.get('TOTAL', None),
-                art.get('CLAVE SAT', None),
-                art.get('DESCRIPCION', '')
-            ))
-            inserted += 1
-        except sqlite3.IntegrityError:
-            print(f"Serie duplicada ignorada: {art.get('No de SERIE:')}")
+    try:
+        conn.execute("BEGIN TRANSACTION")
+        for art in articulos:
+            try:
+                cursor.execute('''
+                INSERT INTO inventario
+                (estado, sucursal, modelo, modelo_base, color, cantidad, no_serie,
+                 d1, p_unitario, subtotal, iva, total, clave_sat, descripcion)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    'DISPONIBLE',
+                    art.get('SUCURSAL', ''),
+                    art.get('MODELO BASE', ''), # modelo = modelo_base por defecto
+                    art.get('MODELO BASE', ''),
+                    art.get('COLOR', ''),
+                    1,
+                    str(art.get('No de SERIE:', '')).strip(),
+                    art.get('D1', None),
+                    art.get('P. UNITARIO', None),
+                    art.get('SUBTOTAL', None),
+                    art.get('IVA', None),
+                    art.get('TOTAL', None),
+                    art.get('CLAVE SAT', None),
+                    art.get('DESCRIPCION', '')
+                ))
+                inserted += 1
+            except sqlite3.IntegrityError:
+                print(f"Serie duplicada ignorada: {art.get('No de SERIE:')}")
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        print(f"Error insertando articulos, haciendo rollback: {e}")
+        raise
+    finally:
+        conn.close()
 
-    conn.commit()
-    conn.close()
     print(f"Insertados {inserted} registros en SQLite.")
 
 def mark_items_as_used(series_list, machote_name):
@@ -250,14 +257,20 @@ def mark_items_as_used(series_list, machote_name):
     WHERE no_serie IN ({placeholders}) AND estado = 'DISPONIBLE'
     '''
 
-    # Los parámetros deben ser tuplas
     params = [machote_name] + list(series_list)
 
-    cursor.execute(query, params)
-    updated = cursor.rowcount
+    try:
+        conn.execute("BEGIN TRANSACTION")
+        cursor.execute(query, params)
+        updated = cursor.rowcount
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        print(f"Error marcando articulos como usados: {e}")
+        raise
+    finally:
+        conn.close()
 
-    conn.commit()
-    conn.close()
     return updated
 
 def mark_items_as_xml(series_uuid_dict):
@@ -269,14 +282,21 @@ def mark_items_as_xml(series_uuid_dict):
     cursor = conn.cursor()
 
     updated_total = 0
-    for serie, uuid in series_uuid_dict.items():
-        cursor.execute('''
-        UPDATE inventario
-        SET estado = 'XML', uuid = ?
-        WHERE no_serie = ? AND (estado = 'USADO' OR estado = 'DISPONIBLE')
-        ''', (uuid, serie))
-        updated_total += cursor.rowcount
+    try:
+        conn.execute("BEGIN TRANSACTION")
+        for serie, uuid in series_uuid_dict.items():
+            cursor.execute('''
+            UPDATE inventario
+            SET estado = 'XML', uuid = ?
+            WHERE no_serie = ? AND (estado = 'USADO' OR estado = 'DISPONIBLE')
+            ''', (uuid, serie))
+            updated_total += cursor.rowcount
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        print(f"Error cruzando XMLs, haciendo rollback: {e}")
+        raise
+    finally:
+        conn.close()
 
-    conn.commit()
-    conn.close()
     return updated_total
