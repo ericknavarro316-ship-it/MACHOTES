@@ -105,7 +105,7 @@ class MultiSelectMenu(ctk.CTkButton):
             self.dropdown.attributes('-topmost', True)
             x = self.winfo_rootx()
             y = self.winfo_rooty() + self.winfo_height()
-            self.dropdown.geometry(f"+str({x})+str({y})")
+            self.dropdown.geometry(f"+{int(x)}+{int(y)}")
             frame = ctk.CTkScrollableFrame(self.dropdown, fg_color=OOT_THEME["panel"], width=200, height=200, border_color=OOT_THEME["gold"], border_width=1)
             frame.pack(fill="both", expand=True)
             btn_frame = ctk.CTkFrame(frame, fg_color="transparent")
@@ -397,7 +397,8 @@ class InventoryView(BaseView):
             self.trees[tab_name] = tree
 
     def _update_options(self, inventory):
-        total_df = pd.concat([df for df in [inventory.get("reporte"), inventory.get("usados"), inventory.get("xml")] if df is not None and not df.empty])
+        dfs = [df for df in [inventory.get("reporte"), inventory.get("usados"), inventory.get("xml")] if df is not None and not df.empty]
+        total_df = pd.concat(dfs) if dfs else pd.DataFrame()
         if total_df.empty:
             return
         if "SUCURSAL" in total_df.columns:
@@ -517,9 +518,9 @@ class GeneratorView(BaseView):
             top.grid_columnconfigure(i, weight=1)
 
         self.amount_entry = self._entry(top, 0, 0, "Monto objetivo", "150000")
-        self.company_entry = self._entry(top, 0, 1, "Empresa", self.app.state.config.get("empresa_default", ""))
-        self.account_entry = self._entry(top, 0, 2, "Cuenta", self.app.state.config.get("cuenta_default", "MP"))
-        self.rfc_entry = self._entry(top, 0, 3, "RFC (opcional)", self.app.state.config.get("rfc_default", ""))
+        self.company_entry = self._entry(top, 0, 1, "Empresa", self.app.app_state.config.get("empresa_default", ""))
+        self.account_entry = self._entry(top, 0, 2, "Cuenta", self.app.app_state.config.get("cuenta_default", "MP"))
+        self.rfc_entry = self._entry(top, 0, 3, "RFC (opcional)", self.app.app_state.config.get("rfc_default", ""))
 
         filter_frame = ctk.CTkFrame(top, fg_color="transparent")
         filter_frame.grid(row=1, column=0, columnspan=4, sticky="ew", padx=10, pady=10)
@@ -617,7 +618,7 @@ class GeneratorView(BaseView):
             return
 
         self.preview_df = preview
-        self.app.state.last_preview = preview
+        self.app.app_state.last_preview = preview
         for item in self.preview_tree.get_children():
             self.preview_tree.delete(item)
 
@@ -641,9 +642,9 @@ class GeneratorView(BaseView):
             if self.preview_df is None or self.preview_df.empty:
                 return
 
-        company = self.company_entry.get().strip() or self.app.state.config.get("empresa_default", "MOVILIDAD ELECTRICA DE JALISCO")
-        account = self.account_entry.get().strip() or self.app.state.config.get("cuenta_default", "MP")
-        rfc = self.rfc_entry.get().strip() or self.app.state.config.get("rfc_default", "MEJ123456789")
+        company = self.company_entry.get().strip() or self.app.app_state.config.get("empresa_default", "MOVILIDAD ELECTRICA DE JALISCO")
+        account = self.account_entry.get().strip() or self.app.app_state.config.get("cuenta_default", "MP")
+        rfc = self.rfc_entry.get().strip() or self.app.app_state.config.get("rfc_default", "MEJ123456789")
         target = float(self.amount_entry.get().replace(",", "").strip())
 
         try:
@@ -658,8 +659,8 @@ class GeneratorView(BaseView):
             messagebox.showerror("Error exportando", f"No se pudo exportar el machote.\n\n{exc}")
             return
 
-        self.app.state.last_generated_file = route
-        self.app.state.record_event(
+        self.app.app_state.last_generated_file = route
+        self.app.app_state.record_event(
             "machote",
             f"Machote generado: {file_name}",
             {
@@ -766,7 +767,7 @@ class ImportView(BaseView):
         except Exception as exc:
             messagebox.showerror("Error importando", f"No se pudo cargar la mercancía.\n\n{exc}")
             return
-        self.app.state.record_event("carga", f"Mercancía importada ({len(selected_items)} piezas)", {"pdf": pdf_path, "inventario": output_path})
+        self.app.app_state.record_event("carga", f"Mercancía importada ({len(selected_items)} piezas)", {"pdf": pdf_path, "inventario": output_path})
         self.app.refresh_data(force=True)
         self.app.history_view.refresh()
         self.app.log(f"Mercancía importada: {len(selected_items)} piezas desde {os.path.basename(pdf_path)}")
@@ -829,7 +830,7 @@ class XMLView(BaseView):
         except Exception as exc:
             messagebox.showerror("Error procesando XMLs", f"No se pudo actualizar el inventario con XMLs.\n\n{exc}")
             return
-        self.app.state.record_event("xml", "UUIDs conciliados", {"carpeta": folder, "inventario": output_path})
+        self.app.app_state.record_event("xml", "UUIDs conciliados", {"carpeta": folder, "inventario": output_path})
         self.app.refresh_data(force=True)
         self.app.history_view.refresh()
         self.app.log(f"XMLs conciliados desde {folder}")
@@ -858,7 +859,7 @@ class HistoryView(BaseView):
     def refresh(self):
         for item in self.tree.get_children():
             self.tree.delete(item)
-        for entry in self.app.state.history:
+        for entry in self.app.app_state.history:
             self.tree.insert("", "end", values=(entry.get("timestamp", ""), entry.get("type", ""), entry.get("summary", "")))
 
 
@@ -891,7 +892,7 @@ class SettingsView(BaseView):
             ctk.CTkLabel(frame, text=label, text_color=OOT_THEME["muted"]).grid(row=0, column=0, sticky="w")
             entry = ctk.CTkEntry(frame)
             entry.grid(row=1, column=0, sticky="ew", pady=(4, 0))
-            entry.insert(0, str(self.app.state.config.get(key, "")))
+            entry.insert(0, str(self.app.app_state.config.get(key, "")))
             self.entries[key] = entry
 
         mode_frame = ctk.CTkFrame(card, fg_color="transparent")
@@ -899,19 +900,19 @@ class SettingsView(BaseView):
         ctk.CTkLabel(mode_frame, text="Modo visual", text_color=OOT_THEME["muted"]).pack(anchor="w")
         self.mode_option = ctk.CTkOptionMenu(mode_frame, values=["Dark", "Light", "System"], command=self.change_mode, fg_color=OOT_THEME["gold"], button_color=OOT_THEME["gold_hover"], text_color="#221A0C")
         self.mode_option.pack(anchor="w", pady=(6, 0))
-        self.mode_option.set(self.app.state.config.get("theme_mode", "Dark"))
+        self.mode_option.set(self.app.app_state.config.get("theme_mode", "Dark"))
 
         ctk.CTkButton(card, text="Guardar ajustes", fg_color=OOT_THEME["forest"], hover_color=OOT_THEME["forest_hover"], command=self.save).grid(row=len(fields) + 1, column=0, sticky="w", padx=8, pady=(8, 16))
 
     def change_mode(self, mode):
         ctk.set_appearance_mode(mode)
-        self.app.state.config["theme_mode"] = mode
-        self.app.state.save_config()
+        self.app.app_state.config["theme_mode"] = mode
+        self.app.app_state.save_config()
 
     def save(self):
         for key, entry in self.entries.items():
-            self.app.state.config[key] = entry.get().strip()
-        self.app.state.save_config()
+            self.app.app_state.config[key] = entry.get().strip()
+        self.app.app_state.save_config()
         self.app.apply_runtime_config()
         self.app.log("Ajustes guardados correctamente.")
         messagebox.showinfo("Ajustes guardados", "La configuración del sabio ha sido preservada.")
@@ -920,7 +921,7 @@ class SettingsView(BaseView):
 class ZeldaApp(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.state = AppState()
+        self.app_state = AppState()
         self.title("MACHOTES OF TIME · Hero's Admin Panel")
         self.geometry("1480x900")
         self.minsize(1280, 760)
@@ -944,10 +945,10 @@ class ZeldaApp(ctk.CTk):
 
 
     def apply_runtime_config(self):
-        mg.PATH_INVENTARIO = self.state.config.get("inventario_path", mg.PATH_INVENTARIO)
-        mg.PATH_MACHOTE = self.state.config.get("machote_path", mg.PATH_MACHOTE)
-        mg.PATH_PRECIOS = self.state.config.get("precios_path", mg.PATH_PRECIOS)
-        mg.OUTPUT_DIR = self.state.config.get("output_dir", mg.OUTPUT_DIR)
+        mg.PATH_INVENTARIO = self.app_state.config.get("inventario_path", mg.PATH_INVENTARIO)
+        mg.PATH_MACHOTE = self.app_state.config.get("machote_path", mg.PATH_MACHOTE)
+        mg.PATH_PRECIOS = self.app_state.config.get("precios_path", mg.PATH_PRECIOS)
+        mg.OUTPUT_DIR = self.app_state.config.get("output_dir", mg.OUTPUT_DIR)
 
     def style_treeview(self):
         style = ttk.Style()
@@ -975,7 +976,7 @@ class ZeldaApp(ctk.CTk):
         self.sidebar.grid(row=0, column=0, rowspan=2, sticky="nsew")
         self.sidebar.grid_rowconfigure(9, weight=1)
 
-        ctk.CTkLabel(self.sidebar, text=self.state.config.get("logo_text", "MACHOTES OF TIME"), text_color=OOT_THEME["gold"], justify="left", font=ctk.CTkFont(size=28, weight="bold")).grid(row=0, column=0, sticky="w", padx=20, pady=(24, 6))
+        ctk.CTkLabel(self.sidebar, text=self.app_state.config.get("logo_text", "MACHOTES OF TIME"), text_color=OOT_THEME["gold"], justify="left", font=ctk.CTkFont(size=28, weight="bold")).grid(row=0, column=0, sticky="w", padx=20, pady=(24, 6))
         ctk.CTkLabel(self.sidebar, text="Panel inspirado en Ocarina of Time", text_color=OOT_THEME["text"], font=ctk.CTkFont(size=12)).grid(row=1, column=0, sticky="w", padx=20, pady=(0, 20))
 
         self.nav_buttons = {}
@@ -1058,10 +1059,10 @@ class ZeldaApp(ctk.CTk):
         thread.start()
 
     def get_inventory_data(self, refresh=False):
-        if self.state.inventory_cache is None or refresh:
+        if self.app_state.inventory_cache is None or refresh:
             try:
                 df_reporte, df_usados, df_xml, df_precios = mg.load_data()
-                self.state.inventory_cache = {
+                self.app_state.inventory_cache = {
                     "reporte": df_reporte,
                     "usados": df_usados,
                     "xml": df_xml,
@@ -1071,10 +1072,10 @@ class ZeldaApp(ctk.CTk):
                 self.log(f"Error cargando datos base: {exc}")
                 messagebox.showerror("Datos no disponibles", f"No se pudieron leer los archivos base.\n\n{exc}")
                 return None
-        return self.state.inventory_cache
+        return self.app_state.inventory_cache
 
     def refresh_data(self, force=False):
-        self.state.inventory_cache = None if force else self.state.inventory_cache
+        self.app_state.inventory_cache = None if force else self.app_state.inventory_cache
         inventory = self.get_inventory_data(refresh=force)
         if not inventory:
             return
@@ -1094,14 +1095,14 @@ class ZeldaApp(ctk.CTk):
             self.views[key].refresh()
 
     def open_output_folder(self):
-        output_dir = Path(self.state.config.get("output_dir", mg.OUTPUT_DIR))
+        output_dir = Path(self.app_state.config.get("output_dir", mg.OUTPUT_DIR))
         output_dir.mkdir(exist_ok=True)
         self.log(f"Carpeta de salida lista en {output_dir}")
         messagebox.showinfo("Carpeta de salida", f"Ubicación actual:\n\n{output_dir.resolve()}")
 
     def on_close(self):
-        self.state.save_config()
-        self.state.save_history()
+        self.app_state.save_config()
+        self.app_state.save_history()
         self.destroy()
 
 
