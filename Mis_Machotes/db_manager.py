@@ -140,6 +140,13 @@ def is_db_initialized():
     conn.close()
     return count > 0
 
+def create_empty_inventory():
+    """Crea una base de datos de inventario limpia si no existe el Excel original"""
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+    init_db()
+    print("Se creó una base de datos en blanco.")
+    return True
+
 # --- Funciones para reemplazar pandas en machote_generator.py ---
 
 def get_inventory_dataframes():

@@ -135,25 +135,26 @@ import db_manager
 
 def load_data():
     if not db_manager.is_db_initialized():
-        print("Base de datos SQLite no inicializada. Migrando desde Excel...")
-        if not db_manager.migrate_excel_to_sqlite(PATH_INVENTARIO):
-            print("Error migrando Excel, usando modo solo lectura antiguo.")
-            df_reporte = pd.read_excel(PATH_INVENTARIO, sheet_name='REPORTE', header=3)
-            df_usados = pd.read_excel(PATH_INVENTARIO, sheet_name='USADOS', header=3)
-            try:
-                df_xml = pd.read_excel(PATH_INVENTARIO, sheet_name='XML_ENCONTRADOS', header=3)
-            except Exception:
-                df_xml = pd.DataFrame(columns=df_reporte.columns.tolist() + ['UUID'])
+        print("Base de datos SQLite no inicializada. Intentando migrar desde Excel...")
+        if os.path.exists(PATH_INVENTARIO):
+            if not db_manager.migrate_excel_to_sqlite(PATH_INVENTARIO):
+                print("Aviso: No se pudo migrar Excel. Creando DB vacía.")
+                db_manager.create_empty_inventory()
         else:
-            df_reporte, df_usados, df_xml = db_manager.get_inventory_dataframes()
-    else:
-        df_reporte, df_usados, df_xml = db_manager.get_inventory_dataframes()
+            print(f"No existe {PATH_INVENTARIO}. Inicializando BD limpia desde cero.")
+            db_manager.create_empty_inventory()
+
+    df_reporte, df_usados, df_xml = db_manager.get_inventory_dataframes()
         
-    df_precios = pd.read_excel(PATH_PRECIOS, sheet_name='Para imprimir', header=2)
-    df_precios = df_precios[['CLAVE SAT', 'DESCRIPCION', 'MODELO', 'D1']]
-    df_precios.dropna(subset=['MODELO'], inplace=True)
-    df_precios['MODELO'] = df_precios['MODELO'].astype(str).str.strip().str.upper()
-    df_precios['CLAVE SAT'] = df_precios['CLAVE SAT'].fillna(0).astype(int).astype(str)
+    if os.path.exists(PATH_PRECIOS):
+        df_precios = pd.read_excel(PATH_PRECIOS, sheet_name='Para imprimir', header=2)
+        df_precios = df_precios[['CLAVE SAT', 'DESCRIPCION', 'MODELO', 'D1']]
+        df_precios.dropna(subset=['MODELO'], inplace=True)
+        df_precios['MODELO'] = df_precios['MODELO'].astype(str).str.strip().str.upper()
+        df_precios['CLAVE SAT'] = df_precios['CLAVE SAT'].fillna(0).astype(int).astype(str)
+    else:
+        print(f"Advertencia: Archivo de precios '{PATH_PRECIOS}' no encontrado. Precios serán $0.")
+        df_precios = pd.DataFrame(columns=['CLAVE SAT', 'DESCRIPCION', 'MODELO', 'D1'])
     
     return df_reporte, df_usados, df_xml, df_precios
 
@@ -559,50 +560,12 @@ def cargar_inventario(ruta_pdf, path_inventario, lista_articulos=None):
         print("No hay articulos nuevos validos para insertar.")
         return
         
-    print(f"Insertando {len(a_insertar)} articulos nuevos...")
-    # 1. Update SQLite
+    print(f"Insertando {len(a_insertar)} articulos nuevos en SQLite...")
+    # Solo actualizamos SQLite. Excel se genera bajo demanda después.
     db_manager.insert_new_items(a_insertar)
     
-    # 2. Update Excel
-    fila_inicio = ws_reporte.max_row + 1
-    
-    for art in a_insertar:
-        ws_reporte.cell(row=fila_inicio, column=1).value = art['SUCURSAL']
-        ws_reporte.cell(row=fila_inicio, column=2).value = art['MODELO BASE'] 
-        ws_reporte.cell(row=fila_inicio, column=3).value = art['MODELO BASE']
-        ws_reporte.cell(row=fila_inicio, column=4).value = art['COLOR']
-        ws_reporte.cell(row=fila_inicio, column=5).value = 1
-        ws_reporte.cell(row=fila_inicio, column=6).value = art['No de SERIE:']
-        
-        # Columnas de precio
-        ws_reporte.cell(row=fila_inicio, column=7).value = art['D1']
-        ws_reporte.cell(row=fila_inicio, column=8).value = art['P. UNITARIO']
-        ws_reporte.cell(row=fila_inicio, column=9).value = art['SUBTOTAL']
-        ws_reporte.cell(row=fila_inicio, column=10).value = art['IVA']
-        ws_reporte.cell(row=fila_inicio, column=11).value = art['TOTAL']
-        ws_reporte.cell(row=fila_inicio, column=12).value = art['CLAVE SAT']
-        ws_reporte.cell(row=fila_inicio, column=13).value = art['DESCRIPCION']
-        
-        for c in range(1, 15):
-            origen = ws_reporte.cell(row=5, column=c)
-            destino = ws_reporte.cell(row=fila_inicio, column=c)
-            destino.font = copy(origen.font)
-            destino.border = copy(origen.border)
-            destino.fill = copy(origen.fill)
-            destino.number_format = origen.number_format
-            destino.alignment = copy(origen.alignment)
-            
-        fila_inicio += 1
-        
-    max_row = ws_reporte.max_row
-    ws_reporte.cell(row=2, column=2).value = f"=SUM(E5:E{max_row})"
-    ws_reporte.cell(row=2, column=5).value = f"=SUM(I5:I{max_row})"
-    ws_reporte.cell(row=2, column=8).value = f"=SUM(J5:J{max_row})"
-    ws_reporte.cell(row=2, column=11).value = f"=SUM(K5:K{max_row})"
-    
-    path_salida = path_inventario.replace(".xlsx", "_CARGADO.xlsx")
-    wb.save(path_salida)
-    print(f"Inventario actualizado guardado en {path_salida}")
+    path_salida = path_inventario # Ya no generamos _CARGADO temporalmente aquí
+    print(f"Nuevos artículos insertados en base de datos. (Inventario Excel se actualizará bajo demanda).")
 
 def procesar_xmls(xml_dir):
     import glob
@@ -659,189 +622,21 @@ def procesar_xmls(xml_dir):
     return series_uuid
     
 def actualizar_inventario_uuid(xml_dir, path_inventario):
-    import openpyxl
-    from openpyxl.styles import Font
-    from copy import copy
-    
     series_a_buscar = procesar_xmls(xml_dir)
     if not series_a_buscar:
         print("No hay UUIDs/series para actualizar.")
         return
         
-    print("Actualizando Inventario con UUIDs...")
+    print("Actualizando SQLite Inventario con UUIDs...")
     db_manager.mark_items_as_xml(series_a_buscar)
-
-    wb = openpyxl.load_workbook(path_inventario)
-    
-    if 'XML_ENCONTRADOS' not in wb.sheetnames:
-        print("Error: No existe la pestaña XML_ENCONTRADOS en el inventario.")
-        return
-        
-    ws_xml = wb['XML_ENCONTRADOS']
-    
-    fila_xml = ws_xml.max_row + 1
-    for r in range(ws_xml.max_row, 4, -1):
-        if ws_xml.cell(row=r, column=1).value is not None or ws_xml.cell(row=r, column=2).value is not None:
-            fila_xml = r + 1
-            break
-    else:
-        fila_xml = 5
-        
-    encontrados_total = 0
-    
-    for nombre_hoja in ['USADOS', 'REPORTE']:
-        if nombre_hoja not in wb.sheetnames: continue
-        ws = wb[nombre_hoja]
-        
-        col_serie = 6
-        for c in range(1, 20):
-            if ws.cell(row=4, column=c).value == 'No de SERIE:':
-                col_serie = c
-                break
-                
-        col_uuid_dest = 14
-        for c in range(1, 20):
-            if ws_xml.cell(row=4, column=c).value == 'UUID':
-                col_uuid_dest = c
-                break
-                
-        filas_a_borrar = []
-        
-        for r in range(5, ws.max_row + 1):
-            serie_val = ws.cell(row=r, column=col_serie).value
-            if serie_val:
-                serie_val = str(serie_val).strip()
-                if serie_val in series_a_buscar:
-                    uuid_val = series_a_buscar[serie_val]
-                    
-                    c_origen_idx = 1
-                    c_destino_idx = 1
-                    
-                    while c_origen_idx <= ws.max_column + 2 and c_destino_idx <= 20:
-                        cabecera_origen = ws.cell(row=4, column=c_origen_idx).value
-                        if cabecera_origen == 'MACHOTE':
-                            c_origen_idx += 1
-                            continue
-                            
-                        if c_destino_idx == col_uuid_dest:
-                            ws_xml.cell(row=fila_xml, column=col_uuid_dest).value = uuid_val
-                            ws_xml.cell(row=fila_xml, column=col_uuid_dest).font = Font(bold=True)
-                            c_destino_idx += 1
-                            if cabecera_origen == 'UUID': c_origen_idx += 1
-                            continue
-                            ws_xml.cell(row=fila_xml, column=c_destino_idx).value = uuid_val
-                            ws_xml.cell(row=fila_xml, column=c_destino_idx).font = Font(bold=True)
-                            c_destino_idx += 1
-                            continue
-                            
-                        origen = ws.cell(row=r, column=c_origen_idx)
-                        destino = ws_xml.cell(row=fila_xml, column=c_destino_idx)
-                        destino.value = origen.value
-                        destino.font = copy(origen.font)
-                        destino.border = copy(origen.border)
-                        destino.fill = copy(origen.fill)
-                        destino.number_format = origen.number_format
-                        destino.alignment = copy(origen.alignment)
-                            
-                        c_origen_idx += 1
-                        c_destino_idx += 1
-                        
-                    del series_a_buscar[serie_val]
-                    encontrados_total += 1
-                    fila_xml += 1
-                    filas_a_borrar.append(r)
-                    
-        for r in reversed(filas_a_borrar):
-            ws.delete_rows(r, 1)
-            
-    print(f"Se movieron exitosamente {encontrados_total} articulos a XML_ENCONTRADOS.")
-    
-    if series_a_buscar:
-        print(f"Ignoradas {len(series_a_buscar)} series (no encontradas en USADOS ni en REPORTE).")
-        
-    for ws in [wb['REPORTE'], wb['USADOS'], ws_xml]:
-        ultima_fila = ws.max_row
-        rango_fin = ultima_fila if ultima_fila >= 5 else 5
-        ws.cell(row=2, column=2).value = f"=SUM(E5:E{rango_fin})"
-        ws.cell(row=2, column=5).value = f"=SUM(I5:I{rango_fin})"
-        ws.cell(row=2, column=8).value = f"=SUM(J5:J{rango_fin})"
-        ws.cell(row=2, column=11).value = f"=SUM(K5:K{rango_fin})"
-        
-    path_salida = path_inventario.replace(".xlsx", "_UUID_ACTUALIZADO.xlsx")
-    wb.save(path_salida)
-    print(f"Inventario actualizado con UUIDs guardado en {path_salida}")
-
+    print("Inventario SQLite actualizado con UUIDs.")
+    return path_inventario
 
 def actualizar_inventario_base(df_seleccion, nombre_machote):
-    print("Actualizando Inventario...")
+    print("Actualizando SQLite Inventario...")
     series_usadas = df_seleccion['No de SERIE:'].tolist()
-
-    # 1. Update SQLite fast
     db_manager.mark_items_as_used(series_usadas, nombre_machote)
-
-    # 2. Update Excel keeping format (this is slow but needed for backwards compatibility)
-    wb_inv = openpyxl.load_workbook(PATH_INVENTARIO)
-    ws_reporte = wb_inv['REPORTE']
-    ws_usados = wb_inv['USADOS']
-    
-    col_serie = 6
-    for c in range(1, 20):
-        if ws_reporte.cell(row=4, column=c).value == 'No de SERIE:':
-            col_serie = c
-            break
-            
-    fila_usados = ws_usados.max_row + 1
-    for r in range(ws_usados.max_row, 4, -1):
-        if ws_usados.cell(row=r, column=1).value is not None or ws_usados.cell(row=r, column=2).value is not None:
-            fila_usados = r + 1
-            break
-    else:
-        fila_usados = 5
-        
-    filas_a_borrar = []
-    
-    for r in range(5, ws_reporte.max_row + 1):
-        serie_val = ws_reporte.cell(row=r, column=col_serie).value
-        if serie_val in series_usadas:
-            for c in range(1, ws_reporte.max_column + 1):
-                origen = ws_reporte.cell(row=r, column=c)
-                destino = ws_usados.cell(row=fila_usados, column=c)
-                destino.value = origen.value
-                if origen.font: destino.font = copy(origen.font)
-                if origen.border: destino.border = copy(origen.border)
-                if origen.fill: destino.fill = copy(origen.fill)
-                if origen.number_format: destino.number_format = origen.number_format
-                if origen.alignment: destino.alignment = copy(origen.alignment)
-            
-            # Asignar MACHOTE en col 14
-            ws_usados.cell(row=fila_usados, column=14).value = nombre_machote
-            ws_usados.cell(row=fila_usados, column=14).font = Font(bold=True)
-            
-            fila_usados += 1
-            filas_a_borrar.append(r)
-            
-    for r in reversed(filas_a_borrar):
-        ws_reporte.delete_rows(r, 1)
-        
-    # --- RECALCULAR TOTALES DE LA FILA 2 PARA TODAS LAS PESTAÑAS ---
-    ws_xml = wb_inv['XML_ENCONTRADOS'] if 'XML_ENCONTRADOS' in wb_inv.sheetnames else None
-    
-    hojas_a_recalcular = [ws_reporte, ws_usados]
-    if ws_xml:
-        hojas_a_recalcular.append(ws_xml)
-        
-    for ws in hojas_a_recalcular:
-        ultima_fila = ws.max_row
-        rango_fin = ultima_fila if ultima_fila >= 5 else 5
-        
-        ws.cell(row=2, column=2).value = f"=SUM(E5:E{rango_fin})"
-        ws.cell(row=2, column=5).value = f"=SUM(I5:I{rango_fin})"
-        ws.cell(row=2, column=8).value = f"=SUM(J5:J{rango_fin})"
-        ws.cell(row=2, column=11).value = f"=SUM(K5:K{rango_fin})"
-    
-    nuevo_inventario_path = PATH_INVENTARIO.replace(".xlsx", "_NUEVO.xlsx")
-    wb_inv.save(nuevo_inventario_path)
-    return nuevo_inventario_path
+    return PATH_INVENTARIO
 
 def importar_machote_externo(ruta_machote):
     import pandas as pd
@@ -906,100 +701,21 @@ def importar_machote_externo(ruta_machote):
 
     if series_coincidentes:
         db_manager.mark_items_as_used(list(series_coincidentes), f"EXT: {nombre_machote}")
-
-        # We should also update the Excel file to reflect the database changes.
-        actualizar_inventario_base_por_series(list(series_coincidentes), f"EXT: {nombre_machote}")
+        print("Machote externo importado exitosamente en SQLite.")
 
     return list(series_coincidentes), len(series_encontradas)
 
-def actualizar_inventario_base_por_series(series_usadas, nombre_machote):
-    # Similar to actualizar_inventario_base but accepts a list of series instead of a dataframe
-    print("Actualizando Excel de Inventario...")
-    import openpyxl
-    from openpyxl.styles import Font
-    from copy import copy
-
-    wb_inv = openpyxl.load_workbook(PATH_INVENTARIO)
-    ws_reporte = wb_inv['REPORTE']
-    if 'USADOS' not in wb_inv.sheetnames:
-        wb_inv.create_sheet('USADOS')
-    ws_usados = wb_inv['USADOS']
-
-    col_serie = 6
-    for c in range(1, 20):
-        if ws_reporte.cell(row=4, column=c).value == 'No de SERIE:':
-            col_serie = c
-            break
-
-    fila_usados = ws_usados.max_row + 1
-    for r in range(ws_usados.max_row, 4, -1):
-        if ws_usados.cell(row=r, column=1).value is not None or ws_usados.cell(row=r, column=2).value is not None:
-            fila_usados = r + 1
-            break
-    else:
-        fila_usados = 5
-
-    filas_a_borrar = []
-
-    for r in range(5, ws_reporte.max_row + 1):
-        serie_val = ws_reporte.cell(row=r, column=col_serie).value
-        if serie_val and str(serie_val).strip() in series_usadas:
-            for c in range(1, ws_reporte.max_column + 1):
-                origen = ws_reporte.cell(row=r, column=c)
-                destino = ws_usados.cell(row=fila_usados, column=c)
-                destino.value = origen.value
-                if origen.font: destino.font = copy(origen.font)
-                if origen.border: destino.border = copy(origen.border)
-                if origen.fill: destino.fill = copy(origen.fill)
-                if origen.number_format: destino.number_format = origen.number_format
-                if origen.alignment: destino.alignment = copy(origen.alignment)
-
-            # Asignar MACHOTE en col 14
-            ws_usados.cell(row=fila_usados, column=14).value = nombre_machote
-            ws_usados.cell(row=fila_usados, column=14).font = Font(bold=True)
-
-            fila_usados += 1
-            filas_a_borrar.append(r)
-
-    for r in reversed(filas_a_borrar):
-        ws_reporte.delete_rows(r, 1)
-
-    # Recalcular
-    ws_xml = wb_inv['XML_ENCONTRADOS'] if 'XML_ENCONTRADOS' in wb_inv.sheetnames else None
-    hojas_a_recalcular = [ws_reporte, ws_usados]
-    if ws_xml:
-        hojas_a_recalcular.append(ws_xml)
-
-    for ws in hojas_a_recalcular:
-        ultima_fila = ws.max_row
-        rango_fin = ultima_fila if ultima_fila >= 5 else 5
-        ws.cell(row=2, column=2).value = f"=SUM(E5:E{rango_fin})"
-        ws.cell(row=2, column=5).value = f"=SUM(I5:I{rango_fin})"
-        ws.cell(row=2, column=8).value = f"=SUM(J5:J{rango_fin})"
-        ws.cell(row=2, column=11).value = f"=SUM(K5:K{rango_fin})"
-
-    nuevo_inventario_path = PATH_INVENTARIO.replace(".xlsx", "_EXT_ACTUALIZADO.xlsx")
-    wb_inv.save(nuevo_inventario_path)
-    # Movemos el _replace_inventory_file arriba para que pueda ser llamado
-    return _replace_inventory_file(nuevo_inventario_path, PATH_INVENTARIO)
-
 
 def _replace_inventory_file(nuevo_path, path_inventario=PATH_INVENTARIO):
-    import shutil
-    import os
-    if not os.path.exists(nuevo_path):
-        raise FileNotFoundError(f"No se encontró el archivo actualizado: {nuevo_path}")
-    shutil.move(nuevo_path, path_inventario)
+    # This function is no longer actively replacing Excel files as SQLite is the source of truth,
+    # but it remains as a no-op placeholder for any legacy imports.
     return path_inventario
 
 
 def deshacer_machote(nombre_machote):
-    import openpyxl
-    from openpyxl.styles import Font
-    from copy import copy
     import pandas as pd
 
-    print(f"Deshaciendo machote: {nombre_machote}")
+    print(f"Deshaciendo machote en SQLite: {nombre_machote}")
 
     conn = db_manager.get_connection()
     df_usados = pd.read_sql_query("SELECT * FROM inventario WHERE estado='USADO' AND machote=?", conn, params=(nombre_machote,))
@@ -1011,91 +727,24 @@ def deshacer_machote(nombre_machote):
 
     series_a_restaurar = df_usados['no_serie'].tolist()
 
-    # 1. Update SQLite
-    cursor = conn.cursor()
-    placeholders = ','.join('?' * len(series_a_restaurar))
-    cursor.execute(f'''
-    UPDATE inventario
-    SET estado = 'DISPONIBLE', machote = NULL
-    WHERE no_serie IN ({placeholders}) AND estado = 'USADO'
-    ''', series_a_restaurar)
-    # Don't commit yet, wait for Excel to succeed!
-
-    # 2. Update Excel
-    wb_inv = openpyxl.load_workbook(PATH_INVENTARIO)
-    if 'USADOS' not in wb_inv.sheetnames or 'REPORTE' not in wb_inv.sheetnames:
-        return False
-
-    ws_usados = wb_inv['USADOS']
-    ws_reporte = wb_inv['REPORTE']
-
-    col_serie = 6
-    for c in range(1, 20):
-        if ws_usados.cell(row=4, column=c).value == 'No de SERIE:':
-            col_serie = c
-            break
-
-    fila_reporte = ws_reporte.max_row + 1
-    for r in range(ws_reporte.max_row, 4, -1):
-        if ws_reporte.cell(row=r, column=1).value is not None or ws_reporte.cell(row=r, column=2).value is not None:
-            fila_reporte = r + 1
-            break
-    else:
-        fila_reporte = 5
-
-    filas_a_borrar = []
-
-    for r in range(5, ws_usados.max_row + 1):
-        serie_val = ws_usados.cell(row=r, column=col_serie).value
-        if serie_val and str(serie_val).strip() in series_a_restaurar:
-            for c in range(1, ws_usados.max_column + 1):
-                if c == 14: # Columna de MACHOTE
-                    ws_reporte.cell(row=fila_reporte, column=c).value = None
-                    continue
-
-                origen = ws_usados.cell(row=r, column=c)
-                destino = ws_reporte.cell(row=fila_reporte, column=c)
-                destino.value = origen.value
-                if origen.font: destino.font = copy(origen.font)
-                if origen.border: destino.border = copy(origen.border)
-                if origen.fill: destino.fill = copy(origen.fill)
-                if origen.number_format: destino.number_format = origen.number_format
-                if origen.alignment: destino.alignment = copy(origen.alignment)
-
-            fila_reporte += 1
-            filas_a_borrar.append(r)
-
-    for r in reversed(filas_a_borrar):
-        ws_usados.delete_rows(r, 1)
-
-    # Recalcular
-    ws_xml = wb_inv['XML_ENCONTRADOS'] if 'XML_ENCONTRADOS' in wb_inv.sheetnames else None
-    hojas_a_recalcular = [ws_reporte, ws_usados]
-    if ws_xml:
-        hojas_a_recalcular.append(ws_xml)
-
-    for ws in hojas_a_recalcular:
-        ultima_fila = ws.max_row
-        rango_fin = ultima_fila if ultima_fila >= 5 else 5
-        ws.cell(row=2, column=2).value = f"=SUM(E5:E{rango_fin})"
-        ws.cell(row=2, column=5).value = f"=SUM(I5:I{rango_fin})"
-        ws.cell(row=2, column=8).value = f"=SUM(J5:J{rango_fin})"
-        ws.cell(row=2, column=11).value = f"=SUM(K5:K{rango_fin})"
-
-    nuevo_inventario_path = PATH_INVENTARIO.replace(".xlsx", "_RESTORED.xlsx")
-    wb_inv.save(nuevo_inventario_path)
-
-    # Check if the file replacement throws an error before committing
     try:
-        _replace_inventory_file(nuevo_inventario_path, PATH_INVENTARIO)
-        # Commit a SQLite solo despues de haber guardado en Excel correctamente
+        cursor = conn.cursor()
+        conn.execute("BEGIN TRANSACTION")
+        placeholders = ','.join('?' * len(series_a_restaurar))
+        cursor.execute(f'''
+        UPDATE inventario
+        SET estado = 'DISPONIBLE', machote = NULL
+        WHERE no_serie IN ({placeholders}) AND estado = 'USADO'
+        ''', series_a_restaurar)
         conn.commit()
     except Exception as e:
         conn.rollback()
+        print(f"Error revirtiendo machote en SQLite: {e}")
         raise e
     finally:
         conn.close()
 
+    print("Machote deshecho exitosamente en SQLite.")
     return True
 
 def main():
@@ -1148,18 +797,15 @@ def _replace_inventory_file(nuevo_path, path_inventario=PATH_INVENTARIO):
 
 def generar_machote_y_actualizar(df_seleccion, monto_objetivo, empresa, rfc, cuenta_mp):
     ruta_machote, nombre_machote = generar_machote(df_seleccion, monto_objetivo, empresa, rfc, cuenta_mp)
-    nuevo_inventario_path = actualizar_inventario_base(df_seleccion, nombre_machote)
-    inventario_final = _replace_inventory_file(nuevo_inventario_path, PATH_INVENTARIO)
-    return ruta_machote, nombre_machote, inventario_final
+    actualizar_inventario_base(df_seleccion, nombre_machote)
+    return ruta_machote, nombre_machote, PATH_INVENTARIO
 
 
 def cargar_inventario_y_reemplazar(ruta_pdf, path_inventario=PATH_INVENTARIO, lista_articulos=None):
     cargar_inventario(ruta_pdf, path_inventario, lista_articulos=lista_articulos)
-    path_salida = path_inventario.replace(".xlsx", "_CARGADO.xlsx")
-    return _replace_inventory_file(path_salida, path_inventario)
+    return path_inventario
 
 
 def validar_xml_y_reemplazar(xml_dir, path_inventario=PATH_INVENTARIO):
     actualizar_inventario_uuid(xml_dir, path_inventario)
-    path_salida = path_inventario.replace(".xlsx", "_UUID_ACTUALIZADO.xlsx")
-    return _replace_inventory_file(path_salida, path_inventario)
+    return path_inventario

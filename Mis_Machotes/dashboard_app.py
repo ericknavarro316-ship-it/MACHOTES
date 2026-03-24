@@ -718,7 +718,7 @@ class InventoryView(BaseView):
         self.active_filters_label = ctk.CTkLabel(controls, text="Filtros activos: 0", text_color=CURRENT_THEME["muted"])
         self.active_filters_label.grid(row=0, column=8, padx=(12, 0), sticky="e")
 
-        ctk.CTkButton(controls, text="Guardar Snapshot", fg_color=CURRENT_THEME["gold"], hover_color=CURRENT_THEME["gold_hover"], text_color="#221A0C", command=self.save_snapshot).grid(row=0, column=5, padx=(10, 0))
+        ctk.CTkButton(controls, text="Exportar Excel Completo", fg_color=CURRENT_THEME["gold"], hover_color=CURRENT_THEME["gold_hover"], text_color="#221A0C", command=self.export_full_excel).grid(row=0, column=5, padx=(10, 0))
         ctk.CTkButton(controls, text="Exportar Vista", fg_color=CURRENT_THEME["emerald"], hover_color=CURRENT_THEME["forest_hover"], command=self.export_view).grid(row=0, column=6, padx=10)
         ctk.CTkButton(controls, text="Recargar", fg_color=CURRENT_THEME["forest"], hover_color=CURRENT_THEME["forest_hover"], command=lambda: self.app.refresh_data(force=True)).grid(row=0, column=7)
 
@@ -801,23 +801,41 @@ class InventoryView(BaseView):
         color = CURRENT_THEME["gold"] if active > 0 else CURRENT_THEME["muted"]
         self.active_filters_label.configure(text=f"Filtros activos: {active}", text_color=color)
 
-    def save_snapshot(self):
-        import shutil
+    def export_full_excel(self):
+        import db_export
         from datetime import datetime
-        inv_path = Path(mg.PATH_INVENTARIO)
-        if not inv_path.exists():
-            messagebox.showwarning("Error", "No se encontró el inventario actual.")
+
+        out_path = filedialog.asksaveasfilename(
+            defaultextension=".xlsx",
+            filetypes=[("Excel", "*.xlsx")],
+            title="Exportar Inventario Completo",
+            initialfile=f"Inventario_Completo_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        )
+        if not out_path:
             return
-        backup_dir = DATA_DIR / "backups"
-        backup_dir.mkdir(exist_ok=True)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_path = backup_dir / f"Inventario_{timestamp}.xlsx"
-        try:
-            shutil.copy2(inv_path, backup_path)
-            self.app.log(f"Snapshot guardado en {backup_path}")
-            messagebox.showinfo("Respaldado", f"Inventario copiado a:\n{backup_path}")
-        except Exception as e:
-            messagebox.showerror("Error", f"No se pudo respaldar:\n{e}")
+
+        self.app.log("Generando reporte completo del inventario en segundo plano...")
+        self.lbl_totals.configure(text="Generando Excel completo...", text_color=CURRENT_THEME["warning"])
+
+        def _task():
+            try:
+                db_export.export_inventory_to_excel(out_path)
+                self.app.after(0, self._export_full_success, out_path)
+            except Exception as e:
+                self.app.after(0, self._export_full_error, e)
+
+        self.app.run_in_thread(_task)
+
+    def _export_full_success(self, path):
+        self.app.log(f"Inventario completo exportado exitosamente a {path}")
+        messagebox.showinfo("Exportado", f"Inventario completo generado correctamente en:\n{path}")
+        self.refresh_totals() # Restore label
+
+    def _export_full_error(self, exc):
+        import traceback
+        self.app.log(f"Error generando exportacion completa:\n{traceback.format_exc()}")
+        messagebox.showerror("Error exportando", f"No se pudo generar el archivo.\n\n{exc}")
+        self.refresh_totals()
 
     def export_view(self):
         current_tab = self.tabview.get()
