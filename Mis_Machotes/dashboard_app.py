@@ -57,6 +57,13 @@ DEFAULT_CONFIG = {
 }
 
 
+def format_color_for_display(color_value):
+    color = str(color_value or "").strip().upper()
+    if not color:
+        return ""
+    return " / ".join(part.strip() for part in color.replace("-", "/").split("/") if part.strip())
+
+
 class MultiSelectMenu(ctk.CTkButton):
     def __init__(self, master, title="Seleccionar", values=None, command=None, **kwargs):
         super().__init__(master, text=title, **kwargs)
@@ -434,12 +441,10 @@ class InventoryView(BaseView):
             return
         if "SUCURSAL" in total_df.columns:
             sucursales = sorted([str(x) for x in total_df["SUCURSAL"].dropna().unique() if str(x).strip()])
-            if not self.sucursal_opt.values:
-                self.sucursal_opt.set_values(sucursales)
+            self.sucursal_opt.set_values(sucursales)
         if "MODELO BASE" in total_df.columns:
             modelos = sorted([str(x) for x in total_df["MODELO BASE"].dropna().unique() if str(x).strip()])
-            if not self.modelo_opt.values:
-                self.modelo_opt.set_values(modelos)
+            self.modelo_opt.set_values(modelos)
 
     def save_snapshot(self):
         import shutil
@@ -510,7 +515,7 @@ class InventoryView(BaseView):
                 values = [
                     suc_val,
                     mod_val,
-                    str(row.get("COLOR", "")),
+                    format_color_for_display(row.get("COLOR", "")),
                     serie,
                     self.app.money(row.get("TOTAL", 0)),
                     str(row.get(extra_col, "")) if extra_col and extra_col in df.columns else "",
@@ -600,12 +605,10 @@ class GeneratorView(BaseView):
         if df_rep is not None and not df_rep.empty:
             if "SUCURSAL" in df_rep.columns:
                 sucursales = sorted([str(x) for x in df_rep["SUCURSAL"].dropna().unique() if str(x).strip()])
-                if not self.sucursal_opt.values:
-                    self.sucursal_opt.set_values(sucursales)
+                self.sucursal_opt.set_values(sucursales)
             if "MODELO BASE" in df_rep.columns:
                 modelos = sorted([str(x) for x in df_rep["MODELO BASE"].dropna().unique() if str(x).strip()])
-                if not self.modelo_opt.values:
-                    self.modelo_opt.set_values(modelos)
+                self.modelo_opt.set_values(modelos)
 
     def _entry(self, parent, row, column, label, value=""):
         frame = ctk.CTkFrame(parent, fg_color="transparent")
@@ -752,6 +755,8 @@ class ImportView(BaseView):
         super().__init__(master, app)
         self.selected_pdf = ctk.StringVar(value="")
         self.items_loaded = []
+        self.parse_report = {}
+        self.parse_warnings = []
         self.create_header()
 
         card = ctk.CTkFrame(self, fg_color=OOT_THEME["panel"], corner_radius=18, border_width=1, border_color=OOT_THEME["gold"])
@@ -763,6 +768,8 @@ class ImportView(BaseView):
         top = ctk.CTkFrame(card, fg_color="transparent")
         top.grid(row=0, column=0, sticky="ew", padx=18, pady=(18, 10))
         ctk.CTkButton(top, text="Elegir PDF", fg_color=OOT_THEME["gold"], hover_color=OOT_THEME["gold_hover"], text_color="#221A0C", command=self.select_pdf).pack(side="left")
+        ctk.CTkButton(top, text="Limpiar selección", fg_color=OOT_THEME["panel_alt"], hover_color=OOT_THEME["panel"], command=self.clear_loaded_pdf).pack(side="left", padx=(10, 0))
+        ctk.CTkButton(top, text="Simular importación", fg_color=OOT_THEME["warning"], hover_color="#A55A18", command=self.simulate_import).pack(side="left", padx=10)
         ctk.CTkButton(top, text="Importar mercancía", fg_color=OOT_THEME["forest"], hover_color=OOT_THEME["forest_hover"], command=self.import_pdf).pack(side="left", padx=10)
         ctk.CTkLabel(top, textvariable=self.selected_pdf, text_color=OOT_THEME["text"]).pack(side="left", padx=8)
 
@@ -785,17 +792,79 @@ class ImportView(BaseView):
             return
         self.selected_pdf.set(pdf_path)
         try:
-            self.items_loaded = mg.extraer_nuevos_articulos(pdf_path)
+            self.items_loaded, self.parse_warnings, self.parse_report = mg.extraer_nuevos_articulos(pdf_path, with_report=True)
         except Exception as exc:
             messagebox.showerror("Error leyendo PDF", f"No se pudo analizar el PDF.\n\n{exc}")
             return
         for item in self.preview_tree.get_children():
             self.preview_tree.delete(item)
         for idx, item in enumerate(self.items_loaded):
+            color_display = self._format_color_for_display(item.get("COLOR", ""))
             # Store index in tag to easily identify it later
-            self.preview_tree.insert("", "end", values=("[X]", item.get("SUCURSAL", ""), item.get("MODELO BASE", ""), item.get("COLOR", ""), item.get("No de SERIE:", "")), tags=(str(idx),))
-        self.summary_label.configure(text=f"Se detectaron {len(self.items_loaded)} artículos. Haz doble clic para desmarcar/marcar.")
+            self.preview_tree.insert("", "end", values=("[X]", item.get("SUCURSAL", ""), item.get("MODELO BASE", ""), color_display, item.get("No de SERIE:", "")), tags=(str(idx),))
+        inv = self.app.get_inventory_data(refresh=False) or {}
+        existentes = set()
+        for key in ("reporte", "usados", "xml"):
+            df = inv.get(key)
+            if df is not None and not df.empty and "No de SERIE:" in df.columns:
+                existentes.update(df["No de SERIE:"].astype(str).str.strip().tolist())
+        duplicados = sum(1 for item in self.items_loaded if str(item.get("No de SERIE:", "")).strip() in existentes)
+        self.summary_label.configure(text=f"Se detectaron {len(self.items_loaded)} artículos ({duplicados} potencialmente duplicados). Haz doble clic para desmarcar/marcar.")
+        if self.parse_warnings:
+            self.app.log(f"Advertencias de parseo PDF: {len(self.parse_warnings)} (ver {self.parse_report.get('warnings_log', 'log')})")
         self.app.log(f"PDF analizado: {os.path.basename(pdf_path)} con {len(self.items_loaded)} artículos detectados.")
+
+    def _format_color_for_display(self, color_value):
+        # Solo formato visual: mantenemos dato interno intacto
+        return format_color_for_display(color_value)
+
+    def clear_loaded_pdf(self):
+        self.selected_pdf.set("")
+        self.items_loaded = []
+        self.parse_report = {}
+        self.parse_warnings = []
+        for item in self.preview_tree.get_children():
+            self.preview_tree.delete(item)
+        self.summary_label.configure(text="Selección limpiada. Sin PDF seleccionado.", text_color=OOT_THEME["muted"])
+        self.app.log("Selección de PDF limpiada manualmente.")
+
+    def _get_selected_items(self):
+        selected_items = []
+        for item_id in self.preview_tree.get_children():
+            values = self.preview_tree.item(item_id, "values")
+            if values[0] == "[X]":
+                idx = int(self.preview_tree.item(item_id, "tags")[0])
+                selected_items.append(self.items_loaded[idx])
+        return selected_items
+
+    def simulate_import(self):
+        pdf_path = self.selected_pdf.get().strip()
+        if not pdf_path:
+            messagebox.showwarning("PDF requerido", "Primero selecciona un PDF para simular.")
+            return
+        selected_items = self._get_selected_items()
+        if not selected_items:
+            messagebox.showwarning("Aviso", "No hay artículos seleccionados para simular.")
+            return
+
+        inv = self.app.get_inventory_data(refresh=False) or {}
+        existentes = set()
+        for key in ("reporte", "usados", "xml"):
+            df = inv.get(key)
+            if df is not None and not df.empty and "No de SERIE:" in df.columns:
+                existentes.update(df["No de SERIE:"].astype(str).str.strip().tolist())
+        duplicados = [it for it in selected_items if str(it.get("No de SERIE:", "")).strip() in existentes]
+        nuevos = len(selected_items) - len(duplicados)
+        detalles = (
+            f"PDF: {os.path.basename(pdf_path)}\n"
+            f"Seleccionados: {len(selected_items)}\n"
+            f"Nuevos estimados: {nuevos}\n"
+            f"Duplicados estimados: {len(duplicados)}\n"
+            f"Advertencias parseo: {len(self.parse_warnings)}"
+        )
+        self.summary_label.configure(text=f"Simulación lista: {nuevos} nuevos, {len(duplicados)} duplicados.", text_color=OOT_THEME["gold"])
+        self.app.log(f"Simulación de carga:\n{detalles}")
+        messagebox.showinfo("Simulación de importación", detalles)
 
     def toggle_inclusion(self, event):
         region = self.preview_tree.identify_region(event.x, event.y)
@@ -819,12 +888,7 @@ class ImportView(BaseView):
         if not pdf_path:
             messagebox.showwarning("PDF requerido", "Primero selecciona un PDF para importar.")
             return
-        selected_items = []
-        for item_id in self.preview_tree.get_children():
-            values = self.preview_tree.item(item_id, "values")
-            if values[0] == "[X]":
-                idx = int(self.preview_tree.item(item_id, "tags")[0])
-                selected_items.append(self.items_loaded[idx])
+        selected_items = self._get_selected_items()
         if not selected_items:
             messagebox.showwarning("Aviso", "No hay ningún artículo seleccionado para importar.")
             return
@@ -846,6 +910,7 @@ class ImportView(BaseView):
         self.app.refresh_data(force=True)
         self.app.history_view.refresh()
         self.summary_label.configure(text=f"Carga completa. {len(selected_items)} artículos importados.", text_color=OOT_THEME["emerald"])
+        self.app.log(f"Reporte post-carga: seleccionados={len(selected_items)} warnings_parseo={len(self.parse_warnings)}")
         self.app.log(f"Mercancía importada: {len(selected_items)} piezas desde {os.path.basename(pdf_path)}")
         messagebox.showinfo("Carga completada", f"Se guardaron {len(selected_items)} piezas.\nInventario actualizado en:\n\n{output_path}")
 

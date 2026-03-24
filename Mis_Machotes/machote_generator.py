@@ -15,6 +15,8 @@ PATH_INVENTARIO = "machotes/Inventario_Final.xlsx"
 PATH_MACHOTE = "machotes/EJEMPLO MACHOTE.xlsx"
 PATH_PRECIOS = "machotes/Lista de precios ok.xlsx"
 OUTPUT_DIR = "machotes_generados"
+APP_DATA_DIR = os.path.join(os.path.dirname(__file__), "app_data")
+PDF_WARNINGS_LOG = os.path.join(APP_DATA_DIR, "pdf_parse_warnings.log")
 
 MAPEOS_MODELOS = {
     "S2 AIR V2": "S2",
@@ -22,6 +24,20 @@ MAPEOS_MODELOS = {
     "M2MAX": "M2MAX 8.5",
     "M2MAXB": "M2MAXB10"
 }
+COLORES_VALIDOS = {
+    "VERDE", "ROJO", "AZUL", "ROSA", "BLANCO", "NEGRO",
+    "AMARILLO", "CAFE", "GRIS", "CAYENNE", "PURPURA", "PÚRPURA",
+}
+
+
+def _es_token_color(token):
+    if not token:
+        return False
+    normalizado = str(token).strip().upper().replace("-", "/")
+    partes = [p.strip() for p in normalizado.split("/") if p.strip()]
+    if not partes:
+        return False
+    return all(parte in COLORES_VALIDOS for parte in partes)
 
 
 def extraer_datos_empresa(empresa_busqueda):
@@ -310,7 +326,18 @@ def generar_machote(df_seleccion, monto_objetivo, empresa, rfc, cuenta_mp):
     return ruta_salida, nombre_archivo
 
 
-def extraer_nuevos_articulos(ruta_pdf):
+def _guardar_warnings_pdf(ruta_pdf, warnings):
+    if not warnings:
+        return
+    os.makedirs(APP_DATA_DIR, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with open(PDF_WARNINGS_LOG, "a", encoding="utf-8") as fh:
+        fh.write(f"\n[{timestamp}] {ruta_pdf}\n")
+        for warning in warnings:
+            fh.write(f"- {warning}\n")
+
+
+def extraer_nuevos_articulos(ruta_pdf, with_report=False):
     import pdfplumber
     import re
     import os
@@ -319,11 +346,16 @@ def extraer_nuevos_articulos(ruta_pdf):
     sucursal = match.group(1).strip() if match else "ALMACEN"
     
     articulos_encontrados = []
+    warnings = []
+    bloques_detectados = 0
     
     with pdfplumber.open(ruta_pdf) as pdf:
         text = ""
         for p in pdf.pages:
-            text += p.extract_text(layout=True) + "\n"
+            page_text = p.extract_text(layout=True) or ""
+            if not page_text.strip():
+                warnings.append(f"Página {p.page_number} sin texto extraíble.")
+            text += page_text + "\n"
             
     lineas = text.split("\n")
     modelo_actual = ""
@@ -337,19 +369,25 @@ def extraer_nuevos_articulos(ruta_pdf):
         match_bloque = re.match(r"^(.+?)\s+(\d+)\s+\(\d+\)\s+([A-Z0-9, ]+)\s+\$([\d,]+\.\d{2})", linea)
         
         if match_bloque:
+            bloques_detectados += 1
             nombre_completo = match_bloque.group(1).strip()
             partes_nombre = nombre_completo.split(" ")
             
-            if len(partes_nombre) > 1 and partes_nombre[-1].upper() in ['VERDE', 'ROJO', 'AZUL', 'ROSA', 'BLANCO', 'NEGRO', 'AMARILLO', 'CAFE', 'GRIS', 'CAYENNE', 'PURPURA', 'PÚRPURA']:
+            ultimo_token = partes_nombre[-1].upper() if partes_nombre else ""
+            if len(partes_nombre) > 1 and _es_token_color(ultimo_token):
                 modelo_actual = " ".join(partes_nombre[:-1])
-                color_actual = partes_nombre[-1].upper()
+                color_actual = ultimo_token.replace("-", "/")
             else:
                 modelo_actual = nombre_completo
                 color_actual = ""
                 if i + 1 < len(lineas):
-                    siguiente = lineas[i+1].strip().split()[0]
-                    if re.match(r"^[A-ZÚ]+", siguiente) and siguiente not in ["L1LTWT", "HWM7MTEZA", "LU5RMC"]:
-                        color_actual = siguiente
+                    tokens = lineas[i + 1].strip().split()
+                    if tokens:
+                        siguiente = tokens[0]
+                        if _es_token_color(siguiente) and siguiente not in ["L1LTWT", "HWM7MTEZA", "LU5RMC"]:
+                            color_actual = siguiente.upper().replace("-", "/")
+                    else:
+                        warnings.append(f"Línea {i + 2} vacía al intentar detectar color para '{nombre_completo}'.")
             
             series_str = match_bloque.group(3).strip()
             series = [s.strip() for s in series_str.split(',')]
@@ -369,7 +407,17 @@ def extraer_nuevos_articulos(ruta_pdf):
                 if "$" in lin_j or re.match(r"^(.+?)\s+(\d+)\s+\(\d+\)", lin_j):
                     break
                 j += 1
-                
+
+    _guardar_warnings_pdf(ruta_pdf, warnings)
+    report = {
+        "lineas_analizadas": len(lineas),
+        "bloques_detectados": bloques_detectados,
+        "articulos_detectados": len(articulos_encontrados),
+        "warnings": len(warnings),
+        "warnings_log": PDF_WARNINGS_LOG,
+    }
+    if with_report:
+        return articulos_encontrados, warnings, report
     return articulos_encontrados
 
 
