@@ -19,6 +19,52 @@ cd Mis_Machotes
 python start_app.py
 ```
 
+## Validar instalación (sin abrir ventana)
+Si quieres revisar que todo está correcto antes de abrir la interfaz, ejecuta:
+
+```bash
+cd Mis_Machotes
+python start_app.py --check-only
+```
+
+Este modo valida dependencias, archivos base y que `dashboard_app.py` tenga las secciones críticas.
+
+## Respaldar base de datos (SQLite)
+Puedes crear un respaldo rápido de `app_data/inventory.db` desde terminal:
+
+```bash
+cd Mis_Machotes
+python start_app.py --backup-db
+```
+
+Para listar respaldos disponibles:
+
+```bash
+cd Mis_Machotes
+python start_app.py --list-backups
+```
+
+Para restaurar uno específico:
+
+```bash
+cd Mis_Machotes
+python start_app.py --restore-backup inventory_20260324_120000.db
+```
+
+Para restaurar automáticamente el respaldo más reciente:
+
+```bash
+cd Mis_Machotes
+python start_app.py --restore-latest
+```
+
+Para conservar solo los últimos `N` respaldos y limpiar los demás:
+
+```bash
+cd Mis_Machotes
+python start_app.py --prune-backups 20
+```
+
 ## Descargar el proyecto actualizado
 Si quieres generar un ZIP local con la versión actual del proyecto, desde la raíz del repositorio ejecuta:
 
