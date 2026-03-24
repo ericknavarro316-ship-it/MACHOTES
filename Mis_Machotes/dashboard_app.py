@@ -27,20 +27,20 @@ ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
 
 OOT_THEME = {
-    "bg": "#0F1A12",
-    "panel": "#17271B",
-    "panel_alt": "#203423",
-    "gold": "#D7B56D",
-    "gold_hover": "#C59C43",
-    "forest": "#3E6B45",
-    "forest_hover": "#50895A",
-    "emerald": "#4FAF6D",
-    "text": "#F3ECD2",
-    "muted": "#A8A088",
-    "danger": "#A64B3C",
-    "danger_hover": "#8B3C31",
-    "warning": "#B88A3B",
-    "sky": "#6AA7A5",
+    "bg": "#0D0D12",
+    "panel": "#1A1A24",
+    "panel_alt": "#262636",
+    "gold": "#00E5FF",      # Cyber Cyan
+    "gold_hover": "#00B8D4",
+    "forest": "#2979FF",    # Bright Blue
+    "forest_hover": "#2962FF",
+    "emerald": "#00E676",   # Neon Green
+    "text": "#E0E0E0",
+    "muted": "#9E9E9E",
+    "danger": "#FF3D00",    # Warning Orange
+    "danger_hover": "#DD2C00",
+    "warning": "#FFEA00",   # Cyber Yellow
+    "sky": "#B388FF",       # Neon Purple
 }
 
 DEFAULT_CONFIG = {
@@ -49,7 +49,7 @@ DEFAULT_CONFIG = {
     "rfc_default": "MEJ123456789",
     "theme_mode": "Dark",
     "tolerancia_resumen": 50,
-    "logo_text": "MACHOTES OF TIME",
+    "logo_text": "TERMINAL SHEIKAH",
     "inventario_path": mg.PATH_INVENTARIO,
     "machote_path": mg.PATH_MACHOTE,
     "precios_path": mg.PATH_PRECIOS,
@@ -106,22 +106,53 @@ class MultiSelectMenu(ctk.CTkButton):
             x = self.winfo_rootx()
             y = self.winfo_rooty() + self.winfo_height()
             self.dropdown.geometry(f"+{int(x)}+{int(y)}")
-            frame = ctk.CTkScrollableFrame(self.dropdown, fg_color=OOT_THEME["panel"], width=200, height=200, border_color=OOT_THEME["gold"], border_width=1)
-            frame.pack(fill="both", expand=True)
-            btn_frame = ctk.CTkFrame(frame, fg_color="transparent")
-            btn_frame.pack(fill="x", pady=5)
+
+            main_frame = ctk.CTkFrame(self.dropdown, fg_color=OOT_THEME["panel"], border_color=OOT_THEME["gold"], border_width=1)
+            main_frame.pack(fill="both", expand=True)
+
+            # Search entry
+            self.search_var = ctk.StringVar()
+            self.search_var.trace("w", self._filter_options)
+            search_entry = ctk.CTkEntry(main_frame, textvariable=self.search_var, placeholder_text="Buscar...", height=28)
+            search_entry.pack(fill="x", padx=10, pady=(10, 5))
+
+            # Scrollable options frame
+            self.options_frame = ctk.CTkScrollableFrame(main_frame, fg_color="transparent", width=200, height=200)
+            self.options_frame.pack(fill="both", expand=True)
+
+            # Buttons frame
+            btn_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+            btn_frame.pack(fill="x", pady=5, padx=5)
             def select_all():
-                for var in self.variables.values(): var.set(1)
+                for cb, val in self.checkboxes:
+                    if cb.winfo_ismapped():
+                        self.variables[val].set(1)
             def deselect_all():
-                for var in self.variables.values(): var.set(0)
+                for cb, val in self.checkboxes:
+                    if cb.winfo_ismapped():
+                        self.variables[val].set(0)
             def close_dropdown():
                 self.toggle_dropdown()
+
             ctk.CTkButton(btn_frame, text="Todo", width=50, height=24, command=select_all, fg_color=OOT_THEME["panel_alt"], hover_color=OOT_THEME["forest_hover"]).pack(side="left", padx=2)
             ctk.CTkButton(btn_frame, text="Nada", width=50, height=24, command=deselect_all, fg_color=OOT_THEME["panel_alt"], hover_color=OOT_THEME["danger_hover"]).pack(side="left", padx=2)
-            ctk.CTkButton(btn_frame, text="Cerrar", width=50, height=24, command=close_dropdown, fg_color=OOT_THEME["gold"], text_color="#000", hover_color=OOT_THEME["gold_hover"]).pack(side="right", padx=2)
+            ctk.CTkButton(btn_frame, text="Cerrar", width=50, height=24, command=close_dropdown, fg_color=OOT_THEME["gold"], text_color="#0D0D12", hover_color=OOT_THEME["gold_hover"]).pack(side="right", padx=2)
+
+            self.checkboxes = []
             for val in self.values:
-                cb = ctk.CTkCheckBox(frame, text=val, variable=self.variables[val], onvalue=1, offvalue=0, fg_color=OOT_THEME["forest"], hover_color=OOT_THEME["forest_hover"], text_color=OOT_THEME["text"])
+                cb = ctk.CTkCheckBox(self.options_frame, text=val, variable=self.variables[val], onvalue=1, offvalue=0, fg_color=OOT_THEME["forest"], hover_color=OOT_THEME["forest_hover"], text_color=OOT_THEME["text"])
                 cb.pack(anchor="w", padx=10, pady=5)
+                self.checkboxes.append((cb, val))
+
+    def _filter_options(self, *args):
+        query = self.search_var.get().lower()
+        for cb, val in self.checkboxes:
+            if query in val.lower():
+                if not cb.winfo_ismapped():
+                    cb.pack(anchor="w", padx=10, pady=5)
+            else:
+                if cb.winfo_ismapped():
+                    cb.pack_forget()
 
 class RedirectText:
     def __init__(self, textbox):
@@ -598,25 +629,36 @@ class GeneratorView(BaseView):
         if not inventory:
             return
 
-        try:
-            suc_list = self.sucursal_opt.get()
-            if len(suc_list) == len(self.sucursal_opt.values): suc_list = None
-            mod_list = self.modelo_opt.get()
-            if len(mod_list) == len(self.modelo_opt.values): mod_list = None
+        self.preview_label.configure(text="Calculando combinaciones posibles...", text_color=OOT_THEME["warning"])
+        for item in self.preview_tree.get_children():
+            self.preview_tree.delete(item)
 
-            df_available = mg.procesar_inventario(
-                inventory["reporte"],
-                inventory["precios"],
-                incluir_infantiles=self.include_children.get() == 1,
-                incluir_motobicis=self.include_motor.get() == 1,
-                sucursales=suc_list,
-                modelos=mod_list
-            )
-            preview = mg.seleccionar_articulos(df_available, target)
-        except Exception as exc:
-            messagebox.showerror("Error calculando", f"No se pudo generar la vista previa.\n\n{exc}")
-            return
+        suc_list = self.sucursal_opt.get()
+        if len(suc_list) == len(self.sucursal_opt.values): suc_list = None
+        mod_list = self.modelo_opt.get()
+        if len(mod_list) == len(self.modelo_opt.values): mod_list = None
 
+        inc_children = self.include_children.get() == 1
+        inc_motor = self.include_motor.get() == 1
+
+        def _task():
+            try:
+                df_available = mg.procesar_inventario(
+                    inventory["reporte"],
+                    inventory["precios"],
+                    incluir_infantiles=inc_children,
+                    incluir_motobicis=inc_motor,
+                    sucursales=suc_list,
+                    modelos=mod_list
+                )
+                preview = mg.seleccionar_articulos(df_available, target)
+                self.app.after(0, self._calculate_success, preview, target)
+            except Exception as exc:
+                self.app.after(0, self._calculate_error, exc)
+
+        self.app.run_in_thread(_task)
+
+    def _calculate_success(self, preview, target):
         self.preview_df = preview
         self.app.app_state.last_preview = preview
         for item in self.preview_tree.get_children():
@@ -624,7 +666,7 @@ class GeneratorView(BaseView):
 
         total = pd.to_numeric(preview.get("TOTAL", pd.Series(dtype=float)), errors="coerce").fillna(0).sum() if not preview.empty else 0
         diff = abs(total - target)
-        self.preview_label.configure(text=f"Resultado: {len(preview)} piezas · {self.app.money(total)} · diferencia {self.app.money(diff)}")
+        self.preview_label.configure(text=f"Resultado: {len(preview)} piezas · {self.app.money(total)} · diferencia {self.app.money(diff)}", text_color=OOT_THEME["text"])
 
         for _, row in preview.iterrows():
             self.preview_tree.insert("", "end", values=(
@@ -636,29 +678,42 @@ class GeneratorView(BaseView):
 
         self.app.log(f"Vista previa generada para ${target:,.2f} con {len(preview)} artículos.")
 
+    def _calculate_error(self, exc):
+        import traceback
+        self.preview_label.configure(text="Error calculando vista previa.", text_color=OOT_THEME["danger"])
+        self.app.log(f"Error en simulación:\n{traceback.format_exc()}")
+        messagebox.showerror("Error calculando", f"No se pudo generar la vista previa.\n\n{exc}")
+
     def export_machote(self):
         if self.preview_df is None or self.preview_df.empty:
-            self.calculate_preview()
-            if self.preview_df is None or self.preview_df.empty:
-                return
+            messagebox.showwarning("Aviso", "Primero previsualiza una combinación antes de exportar.")
+            return
 
         company = self.company_entry.get().strip() or self.app.app_state.config.get("empresa_default", "MOVILIDAD ELECTRICA DE JALISCO")
         account = self.account_entry.get().strip() or self.app.app_state.config.get("cuenta_default", "MP")
         rfc = self.rfc_entry.get().strip() or self.app.app_state.config.get("rfc_default", "MEJ123456789")
         target = float(self.amount_entry.get().replace(",", "").strip())
 
-        try:
-            route, file_name, inventory_path = mg.generar_machote_y_actualizar(
-                self.preview_df,
-                target,
-                company,
-                rfc,
-                account,
-            )
-        except Exception as exc:
-            messagebox.showerror("Error exportando", f"No se pudo exportar el machote.\n\n{exc}")
-            return
+        self.app.log("Forjando machote en segundo plano...")
+        self.preview_label.configure(text="Generando Excel y actualizando inventario...", text_color=OOT_THEME["warning"])
 
+        def _task():
+            try:
+                route, file_name, inventory_path = mg.generar_machote_y_actualizar(
+                    self.preview_df,
+                    target,
+                    company,
+                    rfc,
+                    account,
+                )
+                self.app.after(0, self._export_success, route, file_name, inventory_path, company, rfc, account)
+            except Exception as exc:
+                self.app.after(0, self._export_error, exc)
+
+        self.app.run_in_thread(_task)
+
+    def _export_success(self, route, file_name, inventory_path, company, rfc, account):
+        self.preview_label.configure(text="Machote forjado con éxito.", text_color=OOT_THEME["emerald"])
         self.app.app_state.last_generated_file = route
         self.app.app_state.record_event(
             "machote",
@@ -676,6 +731,14 @@ class GeneratorView(BaseView):
         self.app.history_view.refresh()
         self.app.log(f"Machote exportado: {file_name}")
         messagebox.showinfo("Machote creado", f"Se generó correctamente:\n\n{route}\n\nInventario actualizado:\n{inventory_path}")
+
+    def _export_error(self, exc):
+        import traceback
+        self.preview_label.configure(text="Error forjando machote.", text_color=OOT_THEME["danger"])
+        self.app.log(f"Error en exportación:\n{traceback.format_exc()}")
+        messagebox.showerror("Error exportando", f"No se pudo exportar el machote.\n\n{exc}")
+
+    # End of Export Machote
 
 
 class ImportView(BaseView):
@@ -762,16 +825,32 @@ class ImportView(BaseView):
         if not selected_items:
             messagebox.showwarning("Aviso", "No hay ningún artículo seleccionado para importar.")
             return
-        try:
-            output_path = mg.cargar_inventario_y_reemplazar(pdf_path, lista_articulos=selected_items)
-        except Exception as exc:
-            messagebox.showerror("Error importando", f"No se pudo cargar la mercancía.\n\n{exc}")
-            return
+
+        self.app.log("Iniciando importación en segundo plano...")
+        self.summary_label.configure(text="Importando mercancía, por favor espera...", text_color=OOT_THEME["warning"])
+
+        def _task():
+            try:
+                output_path = mg.cargar_inventario_y_reemplazar(pdf_path, lista_articulos=selected_items)
+                self.app.after(0, self._import_success, output_path, selected_items, pdf_path)
+            except Exception as exc:
+                self.app.after(0, self._import_error, exc)
+
+        self.app.run_in_thread(_task)
+
+    def _import_success(self, output_path, selected_items, pdf_path):
         self.app.app_state.record_event("carga", f"Mercancía importada ({len(selected_items)} piezas)", {"pdf": pdf_path, "inventario": output_path})
         self.app.refresh_data(force=True)
         self.app.history_view.refresh()
+        self.summary_label.configure(text=f"Carga completa. {len(selected_items)} artículos importados.", text_color=OOT_THEME["emerald"])
         self.app.log(f"Mercancía importada: {len(selected_items)} piezas desde {os.path.basename(pdf_path)}")
         messagebox.showinfo("Carga completada", f"Se guardaron {len(selected_items)} piezas.\nInventario actualizado en:\n\n{output_path}")
+
+    def _import_error(self, exc):
+        import traceback
+        self.summary_label.configure(text="Error durante la importación.", text_color=OOT_THEME["danger"])
+        self.app.log(f"Error importando PDF:\n{traceback.format_exc()}")
+        messagebox.showerror("Error importando", f"No se pudo cargar la mercancía.\n\n{exc}")
 
 class XMLView(BaseView):
     title = "Templo de UUID"
@@ -825,16 +904,32 @@ class XMLView(BaseView):
         if not folder:
             messagebox.showwarning("Carpeta requerida", "Primero selecciona una carpeta de XMLs.")
             return
-        try:
-            output_path = mg.validar_xml_y_reemplazar(folder)
-        except Exception as exc:
-            messagebox.showerror("Error procesando XMLs", f"No se pudo actualizar el inventario con XMLs.\n\n{exc}")
-            return
+
+        self.app.log("Conciliando XMLs en segundo plano...")
+        self.summary_label.configure(text="Cruzando datos Sheikah con el inventario...", text_color=OOT_THEME["warning"])
+
+        def _task():
+            try:
+                output_path = mg.validar_xml_y_reemplazar(folder)
+                self.app.after(0, self._process_success, output_path, folder)
+            except Exception as exc:
+                self.app.after(0, self._process_error, exc)
+
+        self.app.run_in_thread(_task)
+
+    def _process_success(self, output_path, folder):
         self.app.app_state.record_event("xml", "UUIDs conciliados", {"carpeta": folder, "inventario": output_path})
         self.app.refresh_data(force=True)
         self.app.history_view.refresh()
+        self.summary_label.configure(text="Sincronización de UUID completada.", text_color=OOT_THEME["emerald"])
         self.app.log(f"XMLs conciliados desde {folder}")
         messagebox.showinfo("XML conciliados", f"Inventario actualizado en:\n\n{output_path}")
+
+    def _process_error(self, exc):
+        import traceback
+        self.summary_label.configure(text="Error conciliando XMLs.", text_color=OOT_THEME["danger"])
+        self.app.log(f"Error procesando XML:\n{traceback.format_exc()}")
+        messagebox.showerror("Error procesando XMLs", f"No se pudo actualizar el inventario con XMLs.\n\n{exc}")
 
 
 class HistoryView(BaseView):
@@ -922,7 +1017,7 @@ class ZeldaApp(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.app_state = AppState()
-        self.title("MACHOTES OF TIME · Hero's Admin Panel")
+        self.title("TERMINAL SHEIKAH · Admin Panel")
         self.geometry("1480x900")
         self.minsize(1280, 760)
         self.configure(fg_color=OOT_THEME["bg"])
@@ -955,9 +1050,9 @@ class ZeldaApp(ctk.CTk):
         style.theme_use("default")
         style.configure(
             "Treeview",
-            background="#162318",
+            background=OOT_THEME["panel"],
             foreground=OOT_THEME["text"],
-            fieldbackground="#162318",
+            fieldbackground=OOT_THEME["panel"],
             rowheight=28,
             borderwidth=0,
             font=("Segoe UI", 10),
@@ -965,7 +1060,7 @@ class ZeldaApp(ctk.CTk):
         style.configure(
             "Treeview.Heading",
             background=OOT_THEME["gold"],
-            foreground="#241B0B",
+            foreground="#0D0D12",
             relief="flat",
             font=("Segoe UI", 10, "bold"),
         )
@@ -976,18 +1071,18 @@ class ZeldaApp(ctk.CTk):
         self.sidebar.grid(row=0, column=0, rowspan=2, sticky="nsew")
         self.sidebar.grid_rowconfigure(9, weight=1)
 
-        ctk.CTkLabel(self.sidebar, text=self.app_state.config.get("logo_text", "MACHOTES OF TIME"), text_color=OOT_THEME["gold"], justify="left", font=ctk.CTkFont(size=28, weight="bold")).grid(row=0, column=0, sticky="w", padx=20, pady=(24, 6))
-        ctk.CTkLabel(self.sidebar, text="Panel inspirado en Ocarina of Time", text_color=OOT_THEME["text"], font=ctk.CTkFont(size=12)).grid(row=1, column=0, sticky="w", padx=20, pady=(0, 20))
+        ctk.CTkLabel(self.sidebar, text=self.app_state.config.get("logo_text", "TERMINAL SHEIKAH"), text_color=OOT_THEME["gold"], justify="left", font=ctk.CTkFont(size=28, weight="bold")).grid(row=0, column=0, sticky="w", padx=20, pady=(24, 6))
+        ctk.CTkLabel(self.sidebar, text="Panel inspirado en tecnología Sheikah", text_color=OOT_THEME["text"], font=ctk.CTkFont(size=12)).grid(row=1, column=0, sticky="w", padx=20, pady=(0, 20))
 
         self.nav_buttons = {}
         nav_items = [
-            ("dashboard", "🗺 Dashboard"),
-            ("inventario", "📦 Inventario"),
-            ("machotes", "⚔ Generador"),
-            ("carga", "🚢 Carga PDF"),
-            ("xml", "🧾 Validar XML"),
-            ("history", "📜 Historial"),
-            ("settings", "🔮 Ajustes"),
+            ("dashboard", "◈ Dashboard"),
+            ("inventario", "▣ Inventario"),
+            ("machotes", "◬ Generador"),
+            ("carga", "⎈ Carga PDF"),
+            ("xml", "⎔ Validar XML"),
+            ("history", "◷ Historial"),
+            ("settings", "⚙ Ajustes"),
         ]
         for idx, (key, label) in enumerate(nav_items, start=2):
             btn = ctk.CTkButton(self.sidebar, text=label, anchor="w", fg_color=OOT_THEME["panel_alt"], hover_color=OOT_THEME["forest_hover"], text_color=OOT_THEME["text"], height=42, command=lambda k=key: self.show_view(k))
@@ -996,9 +1091,9 @@ class ZeldaApp(ctk.CTk):
 
         quick = ctk.CTkFrame(self.sidebar, fg_color=OOT_THEME["panel_alt"], corner_radius=16, border_width=1, border_color=OOT_THEME["gold"])
         quick.grid(row=10, column=0, sticky="ew", padx=18, pady=18)
-        ctk.CTkLabel(quick, text="Atajos del Héroe", text_color=OOT_THEME["gold"], font=ctk.CTkFont(size=15, weight="bold")).pack(anchor="w", padx=14, pady=(12, 4))
-        ctk.CTkButton(quick, text="Recargar datos", fg_color=OOT_THEME["gold"], hover_color=OOT_THEME["gold_hover"], text_color="#221A0C", command=lambda: self.refresh_data(force=True)).pack(fill="x", padx=12, pady=6)
-        ctk.CTkButton(quick, text="Abrir carpeta salida", fg_color=OOT_THEME["forest"], hover_color=OOT_THEME["forest_hover"], command=self.open_output_folder).pack(fill="x", padx=12, pady=(0, 12))
+        ctk.CTkLabel(quick, text="Módulos Rápidos", text_color=OOT_THEME["gold"], font=ctk.CTkFont(size=15, weight="bold")).pack(anchor="w", padx=14, pady=(12, 4))
+        ctk.CTkButton(quick, text="Sincronizar Datos", fg_color=OOT_THEME["gold"], hover_color=OOT_THEME["gold_hover"], text_color="#0D0D12", command=lambda: self.refresh_data(force=True)).pack(fill="x", padx=12, pady=6)
+        ctk.CTkButton(quick, text="Carpeta de Salida", fg_color=OOT_THEME["forest"], hover_color=OOT_THEME["forest_hover"], text_color="#E0E0E0", command=self.open_output_folder).pack(fill="x", padx=12, pady=(0, 12))
 
     def create_main_area(self):
         self.main_area = ctk.CTkFrame(self, fg_color="transparent")
@@ -1023,9 +1118,9 @@ class ZeldaApp(ctk.CTk):
         log_frame.grid_columnconfigure(0, weight=1)
         log_frame.grid_rowconfigure(1, weight=1)
         ctk.CTkLabel(log_frame, text="Sheikah Log", text_color=OOT_THEME["gold"], font=ctk.CTkFont(size=16, weight="bold")).grid(row=0, column=0, sticky="w", padx=14, pady=(10, 4))
-        self.log_text = ctk.CTkTextbox(log_frame, height=150, fg_color="#101712", text_color=OOT_THEME["text"], border_width=1, border_color=OOT_THEME["gold"], font=("Consolas", 11))
+        self.log_text = ctk.CTkTextbox(log_frame, height=150, fg_color="#0A0A0F", text_color=OOT_THEME["text"], border_width=1, border_color=OOT_THEME["gold"], font=("Consolas", 11))
         self.log_text.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 12))
-        self.log("Santuario inicializado. Bienvenido al reino de los machotes.")
+        self.log("Terminal inicializada. Protocolos Sheikah activos.")
 
     def create_treeview(self, parent, columns):
         frame = ctk.CTkFrame(parent, fg_color="transparent")

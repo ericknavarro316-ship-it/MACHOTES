@@ -62,15 +62,23 @@ def extraer_datos_empresa(empresa_busqueda):
         
     return rfc, razon_social
 
+import db_manager
+
 def load_data():
-    df_reporte = pd.read_excel(PATH_INVENTARIO, sheet_name='REPORTE', header=3)
-    df_usados = pd.read_excel(PATH_INVENTARIO, sheet_name='USADOS', header=3)
-    
-    try:
-        df_xml = pd.read_excel(PATH_INVENTARIO, sheet_name='XML_ENCONTRADOS', header=3)
-    except Exception:
-        # En caso de que la pestaña no exista todavía, crear un dataframe vacío con la misma estructura
-        df_xml = pd.DataFrame(columns=df_reporte.columns.tolist() + ['UUID'])
+    if not db_manager.is_db_initialized():
+        print("Base de datos SQLite no inicializada. Migrando desde Excel...")
+        if not db_manager.migrate_excel_to_sqlite(PATH_INVENTARIO):
+            print("Error migrando Excel, usando modo solo lectura antiguo.")
+            df_reporte = pd.read_excel(PATH_INVENTARIO, sheet_name='REPORTE', header=3)
+            df_usados = pd.read_excel(PATH_INVENTARIO, sheet_name='USADOS', header=3)
+            try:
+                df_xml = pd.read_excel(PATH_INVENTARIO, sheet_name='XML_ENCONTRADOS', header=3)
+            except Exception:
+                df_xml = pd.DataFrame(columns=df_reporte.columns.tolist() + ['UUID'])
+        else:
+            df_reporte, df_usados, df_xml = db_manager.get_inventory_dataframes()
+    else:
+        df_reporte, df_usados, df_xml = db_manager.get_inventory_dataframes()
         
     df_precios = pd.read_excel(PATH_PRECIOS, sheet_name='Para imprimir', header=2)
     df_precios = df_precios[['CLAVE SAT', 'DESCRIPCION', 'MODELO', 'D1']]
@@ -450,8 +458,11 @@ def cargar_inventario(ruta_pdf, path_inventario, lista_articulos=None):
         print("No hay articulos nuevos validos para insertar.")
         return
         
-    print(f"Insertando {len(a_insertar)} articulos nuevos en REPORTE...")
+    print(f"Insertando {len(a_insertar)} articulos nuevos...")
+    # 1. Update SQLite
+    db_manager.insert_new_items(a_insertar)
     
+    # 2. Update Excel
     fila_inicio = ws_reporte.max_row + 1
     
     for art in a_insertar:
@@ -556,7 +567,9 @@ def actualizar_inventario_uuid(xml_dir, path_inventario):
         print("No hay UUIDs/series para actualizar.")
         return
         
-    print("Abriendo inventario para actualizar UUIDs...")
+    print("Actualizando Inventario con UUIDs...")
+    db_manager.mark_items_as_xml(series_a_buscar)
+
     wb = openpyxl.load_workbook(path_inventario)
     
     if 'XML_ENCONTRADOS' not in wb.sheetnames:
@@ -659,12 +672,17 @@ def actualizar_inventario_uuid(xml_dir, path_inventario):
 
 
 def actualizar_inventario_base(df_seleccion, nombre_machote):
-    print("Actualizando Inventario sin perder formato...")
+    print("Actualizando Inventario...")
+    series_usadas = df_seleccion['No de SERIE:'].tolist()
+
+    # 1. Update SQLite fast
+    db_manager.mark_items_as_used(series_usadas, nombre_machote)
+
+    # 2. Update Excel keeping format (this is slow but needed for backwards compatibility)
     wb_inv = openpyxl.load_workbook(PATH_INVENTARIO)
     ws_reporte = wb_inv['REPORTE']
     ws_usados = wb_inv['USADOS']
     
-    series_usadas = df_seleccion['No de SERIE:'].tolist()
     col_serie = 6
     for c in range(1, 20):
         if ws_reporte.cell(row=4, column=c).value == 'No de SERIE:':
@@ -705,10 +723,6 @@ def actualizar_inventario_base(df_seleccion, nombre_machote):
         ws_reporte.delete_rows(r, 1)
         
     # --- RECALCULAR TOTALES DE LA FILA 2 PARA TODAS LAS PESTAÑAS ---
-    # Col 2: Piezas, Col 5: Subtotal neto, Col 8: IVA, Col 11: Total (con IVA)
-    # Rango de datos: Fila 5 hasta max_row
-    
-    # Agregar XML_ENCONTRADOS
     ws_xml = wb_inv['XML_ENCONTRADOS'] if 'XML_ENCONTRADOS' in wb_inv.sheetnames else None
     
     hojas_a_recalcular = [ws_reporte, ws_usados]
@@ -717,7 +731,6 @@ def actualizar_inventario_base(df_seleccion, nombre_machote):
         
     for ws in hojas_a_recalcular:
         ultima_fila = ws.max_row
-        # Ajustar para no escribir un rango invalido si la hoja esta vacia debajo de los encabezados
         rango_fin = ultima_fila if ultima_fila >= 5 else 5
         
         ws.cell(row=2, column=2).value = f"=SUM(E5:E{rango_fin})"

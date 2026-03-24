@@ -46,24 +46,36 @@ def create_splash_screen():
 
     # Calculate position
     width = 400
-    height = 200
+    height = 240
     screen_width = splash.winfo_screenwidth()
     screen_height = splash.winfo_screenheight()
     x = (screen_width / 2) - (width / 2)
     y = (screen_height / 2) - (height / 2)
     splash.geometry(f'{width}x{height}+{int(x)}+{int(y)}')
 
-    # Zelda OOT theme colors
-    bg_color = "#0F1A12"
-    gold_color = "#D7B56D"
-    text_color = "#F3ECD2"
+    # Zelda Sheikah/BotW theme colors
+    bg_color = "#0D0D12"
+    cyan_color = "#00E5FF"
+    orange_color = "#FF3D00"
+    text_color = "#E0E0E0"
 
-    splash.configure(bg=bg_color, highlightbackground=gold_color, highlightthickness=2)
+    splash.configure(bg=bg_color, highlightbackground=cyan_color, highlightthickness=2)
 
-    title_label = tk.Label(splash, text="MACHOTES OF TIME", font=("Segoe UI", 24, "bold"), bg=bg_color, fg=gold_color)
-    title_label.pack(expand=True)
+    # Try to load the triforce image
+    try:
+        from PIL import Image, ImageTk
+        img = Image.open(BASE_DIR / "triforce.png")
+        img = img.resize((80, 80), Image.Resampling.LANCZOS)
+        splash.photo = ImageTk.PhotoImage(img)
+        img_label = tk.Label(splash, image=splash.photo, bg=bg_color)
+        img_label.pack(pady=(20, 0))
+    except Exception:
+        pass
 
-    loading_label = tk.Label(splash, text="Cargando el Reino...", font=("Segoe UI", 12), bg=bg_color, fg=text_color)
+    title_label = tk.Label(splash, text="TERMINAL SHEIKAH", font=("Segoe UI", 24, "bold"), bg=bg_color, fg=cyan_color)
+    title_label.pack(expand=True, pady=(10, 0))
+
+    loading_label = tk.Label(splash, text="Autenticando usuario...", font=("Segoe UI", 12), bg=bg_color, fg=orange_color)
     loading_label.pack(pady=20)
 
     return splash
