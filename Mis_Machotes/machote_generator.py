@@ -323,7 +323,8 @@ def extraer_nuevos_articulos(ruta_pdf):
     with pdfplumber.open(ruta_pdf) as pdf:
         text = ""
         for p in pdf.pages:
-            text += p.extract_text(layout=True) + "\n"
+            page_text = p.extract_text(layout=True) or ""
+            text += page_text + "\n"
             
     lineas = text.split("\n")
     modelo_actual = ""
@@ -347,9 +348,11 @@ def extraer_nuevos_articulos(ruta_pdf):
                 modelo_actual = nombre_completo
                 color_actual = ""
                 if i + 1 < len(lineas):
-                    siguiente = lineas[i+1].strip().split()[0]
-                    if re.match(r"^[A-ZÚ]+", siguiente) and siguiente not in ["L1LTWT", "HWM7MTEZA", "LU5RMC"]:
-                        color_actual = siguiente
+                    tokens = lineas[i + 1].strip().split()
+                    if tokens:
+                        siguiente = tokens[0]
+                        if re.match(r"^[A-ZÚ]+", siguiente) and siguiente not in ["L1LTWT", "HWM7MTEZA", "LU5RMC"]:
+                            color_actual = siguiente
             
             series_str = match_bloque.group(3).strip()
             series = [s.strip() for s in series_str.split(',')]
