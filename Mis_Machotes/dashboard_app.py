@@ -54,6 +54,7 @@ DEFAULT_CONFIG = {
     "machote_path": mg.PATH_MACHOTE,
     "precios_path": mg.PATH_PRECIOS,
     "output_dir": mg.OUTPUT_DIR,
+    "parse_warning_threshold": 3,
 }
 
 
@@ -202,6 +203,7 @@ class AppState:
         self.inventory_cache = None
         self.last_preview = None
         self.last_generated_file = None
+        self.last_import_backup = None
 
         ctk.set_appearance_mode(self.config.get("theme_mode", "Dark"))
 
@@ -770,7 +772,9 @@ class ImportView(BaseView):
         ctk.CTkButton(top, text="Elegir PDF", fg_color=OOT_THEME["gold"], hover_color=OOT_THEME["gold_hover"], text_color="#221A0C", command=self.select_pdf).pack(side="left")
         ctk.CTkButton(top, text="Limpiar selección", fg_color=OOT_THEME["panel_alt"], hover_color=OOT_THEME["panel"], command=self.clear_loaded_pdf).pack(side="left", padx=(10, 0))
         ctk.CTkButton(top, text="Simular importación", fg_color=OOT_THEME["warning"], hover_color="#A55A18", command=self.simulate_import).pack(side="left", padx=10)
+        ctk.CTkButton(top, text="Ver warnings", fg_color=OOT_THEME["panel_alt"], hover_color=OOT_THEME["panel"], command=self.show_parse_warnings).pack(side="left", padx=(0, 10))
         ctk.CTkButton(top, text="Importar mercancía", fg_color=OOT_THEME["forest"], hover_color=OOT_THEME["forest_hover"], command=self.import_pdf).pack(side="left", padx=10)
+        ctk.CTkButton(top, text="Deshacer última carga", fg_color=OOT_THEME["danger"], hover_color=OOT_THEME["danger_hover"], command=self.undo_last_import).pack(side="left", padx=10)
         ctk.CTkLabel(top, textvariable=self.selected_pdf, text_color=OOT_THEME["text"]).pack(side="left", padx=8)
 
         self.summary_label = ctk.CTkLabel(card, text="Sin PDF seleccionado.", text_color=OOT_THEME["muted"])
@@ -827,6 +831,51 @@ class ImportView(BaseView):
             self.preview_tree.delete(item)
         self.summary_label.configure(text="Selección limpiada. Sin PDF seleccionado.", text_color=OOT_THEME["muted"])
         self.app.log("Selección de PDF limpiada manualmente.")
+
+    def show_parse_warnings(self):
+        if not self.parse_warnings:
+            messagebox.showinfo("Warnings de parseo", "No se registraron warnings en el PDF actual.")
+            return
+        preview = "\n".join(f"- {w}" for w in self.parse_warnings[:15])
+        extra = ""
+        if len(self.parse_warnings) > 15:
+            extra = f"\n... y {len(self.parse_warnings) - 15} más."
+        log_path = self.parse_report.get("warnings_log", "N/D")
+        messagebox.showinfo(
+            "Warnings de parseo",
+            f"Se detectaron {len(self.parse_warnings)} warnings.\n\n{preview}{extra}\n\nLog:\n{log_path}",
+        )
+
+    def _create_pre_import_backup(self):
+        src = Path(mg.PATH_INVENTARIO)
+        if not src.exists():
+            return None
+        backup_dir = DATA_DIR / "import_backups"
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        dst = backup_dir / f"inventario_pre_import_{stamp}.xlsx"
+        shutil.copy2(src, dst)
+        return str(dst)
+
+    def undo_last_import(self):
+        backup = self.app.app_state.last_import_backup
+        if not backup:
+            messagebox.showwarning("Sin respaldo", "No hay una carga reciente para deshacer.")
+            return
+        backup_path = Path(backup)
+        if not backup_path.exists():
+            messagebox.showwarning("Respaldo no encontrado", f"No existe el respaldo:\n{backup_path}")
+            return
+        try:
+            shutil.copy2(backup_path, Path(mg.PATH_INVENTARIO))
+            self.app.refresh_data(force=True)
+            self.app.history_view.refresh()
+            self.summary_label.configure(text="Última carga revertida con éxito.", text_color=OOT_THEME["emerald"])
+            self.app.log(f"Carga revertida usando respaldo: {backup_path.name}")
+            messagebox.showinfo("Reversión completada", f"Inventario restaurado desde:\n{backup_path}")
+        except Exception as exc:
+            self.app.log(f"Error revirtiendo carga: {exc}")
+            messagebox.showerror("Error revirtiendo", f"No se pudo revertir la carga.\n\n{exc}")
 
     def _get_selected_items(self):
         selected_items = []
@@ -892,21 +941,38 @@ class ImportView(BaseView):
         if not selected_items:
             messagebox.showwarning("Aviso", "No hay ningún artículo seleccionado para importar.")
             return
+        threshold = int(self.app.app_state.config.get("parse_warning_threshold", 3))
+        if len(self.parse_warnings) >= threshold:
+            proceed = messagebox.askyesno(
+                "Confirmación reforzada",
+                f"Este PDF tiene {len(self.parse_warnings)} warnings (umbral {threshold}).\n\n"
+                "Se recomienda revisar 'Ver warnings' antes de importar.\n\n¿Deseas continuar?",
+            )
+            if not proceed:
+                self.summary_label.configure(text="Importación cancelada por warnings.", text_color=OOT_THEME["warning"])
+                self.app.log("Importación cancelada por usuario tras confirmación reforzada.")
+                return
 
         self.app.log("Iniciando importación en segundo plano...")
         self.summary_label.configure(text="Importando mercancía, por favor espera...", text_color=OOT_THEME["warning"])
 
         def _task():
             try:
+                backup_path = self._create_pre_import_backup()
                 output_path = mg.cargar_inventario_y_reemplazar(pdf_path, lista_articulos=selected_items)
-                self.app.after(0, self._import_success, output_path, selected_items, pdf_path)
+                self.app.after(0, self._import_success, output_path, selected_items, pdf_path, backup_path)
             except Exception as exc:
                 self.app.after(0, self._import_error, exc)
 
         self.app.run_in_thread(_task)
 
-    def _import_success(self, output_path, selected_items, pdf_path):
-        self.app.app_state.record_event("carga", f"Mercancía importada ({len(selected_items)} piezas)", {"pdf": pdf_path, "inventario": output_path})
+    def _import_success(self, output_path, selected_items, pdf_path, backup_path):
+        self.app.app_state.last_import_backup = backup_path
+        self.app.app_state.record_event(
+            "carga",
+            f"Mercancía importada ({len(selected_items)} piezas)",
+            {"pdf": pdf_path, "inventario": output_path, "backup_previo": backup_path},
+        )
         self.app.refresh_data(force=True)
         self.app.history_view.refresh()
         self.summary_label.configure(text=f"Carga completa. {len(selected_items)} artículos importados.", text_color=OOT_THEME["emerald"])

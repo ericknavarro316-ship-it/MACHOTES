@@ -111,7 +111,11 @@ Ese archivo revisa primero si te faltan librerías y, si hace falta algo, te dic
 En la vista **Puerto Mercante** ahora tienes:
 - **Limpiar selección**: borra el PDF cargado y limpia la tabla previa.
 - **Simular importación**: te dice cuántos artículos seleccionados serían nuevos y cuántos parecen duplicados.
+- **Ver warnings**: abre detalle de advertencias detectadas al parsear el PDF.
 - **Reporte post-carga**: al importar, deja resumen en el log interno.
+- **Deshacer última carga**: restaura el inventario previo a la importación más reciente.
+
+Si el PDF trae muchos warnings (umbral por defecto: `3`), la app pide una confirmación extra antes de importar.
 
 Además, si el parser detecta rarezas del PDF (por ejemplo páginas sin texto), guarda advertencias en:
 `Mis_Machotes/app_data/pdf_parse_warnings.log`.
