@@ -7,39 +7,40 @@ def create_desktop_shortcut():
     base_dir = Path(__file__).resolve().parent
     start_app_path = base_dir / "start_app.py"
 
-    desktop_dir = Path.home() / "Desktop"
-    if not desktop_dir.exists():
-        desktop_dir = Path.home() / "Escritorio"
-
-    if not desktop_dir.exists():
-        print("No se pudo encontrar la carpeta del Escritorio.")
-        return
-
     if os.name == "nt":
-        # Windows
+        # Windows - use VBScript's SpecialFolders to get the true Desktop path
         vbs_script = base_dir / "create_shortcut.vbs"
-        shortcut_path = desktop_dir / "Machotes Of Time.lnk"
 
         vbs_content = f"""
 Set oWS = WScript.CreateObject("WScript.Shell")
-sLinkFile = "{shortcut_path}"
+sLinkFile = oWS.SpecialFolders("Desktop") & "\Machotes Of Time.lnk"
 Set oLink = oWS.CreateShortcut(sLinkFile)
 oLink.TargetPath = "{sys.executable}"
 oLink.Arguments = "{start_app_path}"
 oLink.WorkingDirectory = "{base_dir}"
 oLink.Description = "Zelda-themed Admin Panel for Inventory and Machotes"
 oLink.Save
+WScript.Echo sLinkFile
 """
         try:
             vbs_script.write_text(vbs_content, encoding="utf-8")
+            print("Ejecutando script de acceso directo...")
             os.system(f'cscript //nologo "{vbs_script}"')
             vbs_script.unlink()
-            print(f"Acceso directo creado en: {shortcut_path}")
+            print(f"Acceso directo creado exitosamente en tu Escritorio de Windows.")
         except Exception as e:
             print(f"Error creando acceso directo en Windows: {e}")
 
     else:
-        # Linux / Mac
+        # Linux / Mac - Attempt standard desktop paths
+        desktop_dir = Path.home() / "Desktop"
+        if not desktop_dir.exists():
+            desktop_dir = Path.home() / "Escritorio"
+
+        if not desktop_dir.exists():
+            print("No se pudo encontrar la carpeta del Escritorio.")
+            return
+
         shortcut_path = desktop_dir / "Machotes_Of_Time.desktop"
 
         content = f"""[Desktop Entry]
