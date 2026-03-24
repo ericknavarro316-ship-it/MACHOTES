@@ -27,20 +27,20 @@ ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
 
 OOT_THEME = {
-    "bg": "#0D0D12",
-    "panel": "#1A1A24",
-    "panel_alt": "#262636",
-    "gold": "#00E5FF",      # Cyber Cyan
-    "gold_hover": "#00B8D4",
-    "forest": "#2979FF",    # Bright Blue
-    "forest_hover": "#2962FF",
-    "emerald": "#00E676",   # Neon Green
-    "text": "#E0E0E0",
-    "muted": "#9E9E9E",
-    "danger": "#FF3D00",    # Warning Orange
-    "danger_hover": "#DD2C00",
-    "warning": "#FFEA00",   # Cyber Yellow
-    "sky": "#B388FF",       # Neon Purple
+    "bg": "#0F1A12",
+    "panel": "#17271B",
+    "panel_alt": "#203423",
+    "gold": "#D7B56D",
+    "gold_hover": "#C59C43",
+    "forest": "#3E6B45",
+    "forest_hover": "#50895A",
+    "emerald": "#4FAF6D",
+    "text": "#F3ECD2",
+    "muted": "#A8A088",
+    "danger": "#A64B3C",
+    "danger_hover": "#8B3C31",
+    "warning": "#B88A3B",
+    "sky": "#6AA7A5",
 }
 
 DEFAULT_CONFIG = {
@@ -49,7 +49,7 @@ DEFAULT_CONFIG = {
     "rfc_default": "MEJ123456789",
     "theme_mode": "Dark",
     "tolerancia_resumen": 50,
-    "logo_text": "TERMINAL SHEIKAH",
+    "logo_text": "MACHOTES OF TIME",
     "inventario_path": mg.PATH_INVENTARIO,
     "machote_path": mg.PATH_MACHOTE,
     "precios_path": mg.PATH_PRECIOS,
@@ -1017,7 +1017,7 @@ class ZeldaApp(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.app_state = AppState()
-        self.title("TERMINAL SHEIKAH · Admin Panel")
+        self.title("MACHOTES OF TIME · Hero's Admin Panel")
         self.geometry("1480x900")
         self.minsize(1280, 760)
         self.configure(fg_color=OOT_THEME["bg"])
@@ -1050,9 +1050,9 @@ class ZeldaApp(ctk.CTk):
         style.theme_use("default")
         style.configure(
             "Treeview",
-            background=OOT_THEME["panel"],
+            background="#162318",
             foreground=OOT_THEME["text"],
-            fieldbackground=OOT_THEME["panel"],
+            fieldbackground="#162318",
             rowheight=28,
             borderwidth=0,
             font=("Segoe UI", 10),
@@ -1060,7 +1060,7 @@ class ZeldaApp(ctk.CTk):
         style.configure(
             "Treeview.Heading",
             background=OOT_THEME["gold"],
-            foreground="#0D0D12",
+            foreground="#241B0B",
             relief="flat",
             font=("Segoe UI", 10, "bold"),
         )
@@ -1071,18 +1071,18 @@ class ZeldaApp(ctk.CTk):
         self.sidebar.grid(row=0, column=0, rowspan=2, sticky="nsew")
         self.sidebar.grid_rowconfigure(9, weight=1)
 
-        ctk.CTkLabel(self.sidebar, text=self.app_state.config.get("logo_text", "TERMINAL SHEIKAH"), text_color=OOT_THEME["gold"], justify="left", font=ctk.CTkFont(size=28, weight="bold")).grid(row=0, column=0, sticky="w", padx=20, pady=(24, 6))
-        ctk.CTkLabel(self.sidebar, text="Panel inspirado en tecnología Sheikah", text_color=OOT_THEME["text"], font=ctk.CTkFont(size=12)).grid(row=1, column=0, sticky="w", padx=20, pady=(0, 20))
+        ctk.CTkLabel(self.sidebar, text=self.app_state.config.get("logo_text", "MACHOTES OF TIME"), text_color=OOT_THEME["gold"], justify="left", font=ctk.CTkFont(size=28, weight="bold")).grid(row=0, column=0, sticky="w", padx=20, pady=(24, 6))
+        ctk.CTkLabel(self.sidebar, text="Panel inspirado en Ocarina of Time", text_color=OOT_THEME["text"], font=ctk.CTkFont(size=12)).grid(row=1, column=0, sticky="w", padx=20, pady=(0, 20))
 
         self.nav_buttons = {}
         nav_items = [
-            ("dashboard", "◈ Dashboard"),
-            ("inventario", "▣ Inventario"),
-            ("machotes", "◬ Generador"),
-            ("carga", "⎈ Carga PDF"),
-            ("xml", "⎔ Validar XML"),
-            ("history", "◷ Historial"),
-            ("settings", "⚙ Ajustes"),
+            ("dashboard", "🗺 Dashboard"),
+            ("inventario", "📦 Inventario"),
+            ("machotes", "⚔ Generador"),
+            ("carga", "🚢 Carga PDF"),
+            ("xml", "🧾 Validar XML"),
+            ("history", "📜 Historial"),
+            ("settings", "🔮 Ajustes"),
         ]
         for idx, (key, label) in enumerate(nav_items, start=2):
             btn = ctk.CTkButton(self.sidebar, text=label, anchor="w", fg_color=OOT_THEME["panel_alt"], hover_color=OOT_THEME["forest_hover"], text_color=OOT_THEME["text"], height=42, command=lambda k=key: self.show_view(k))
@@ -1091,9 +1091,9 @@ class ZeldaApp(ctk.CTk):
 
         quick = ctk.CTkFrame(self.sidebar, fg_color=OOT_THEME["panel_alt"], corner_radius=16, border_width=1, border_color=OOT_THEME["gold"])
         quick.grid(row=10, column=0, sticky="ew", padx=18, pady=18)
-        ctk.CTkLabel(quick, text="Módulos Rápidos", text_color=OOT_THEME["gold"], font=ctk.CTkFont(size=15, weight="bold")).pack(anchor="w", padx=14, pady=(12, 4))
-        ctk.CTkButton(quick, text="Sincronizar Datos", fg_color=OOT_THEME["gold"], hover_color=OOT_THEME["gold_hover"], text_color="#0D0D12", command=lambda: self.refresh_data(force=True)).pack(fill="x", padx=12, pady=6)
-        ctk.CTkButton(quick, text="Carpeta de Salida", fg_color=OOT_THEME["forest"], hover_color=OOT_THEME["forest_hover"], text_color="#E0E0E0", command=self.open_output_folder).pack(fill="x", padx=12, pady=(0, 12))
+        ctk.CTkLabel(quick, text="Atajos del Héroe", text_color=OOT_THEME["gold"], font=ctk.CTkFont(size=15, weight="bold")).pack(anchor="w", padx=14, pady=(12, 4))
+        ctk.CTkButton(quick, text="Recargar datos", fg_color=OOT_THEME["gold"], hover_color=OOT_THEME["gold_hover"], text_color="#221A0C", command=lambda: self.refresh_data(force=True)).pack(fill="x", padx=12, pady=6)
+        ctk.CTkButton(quick, text="Abrir carpeta salida", fg_color=OOT_THEME["forest"], hover_color=OOT_THEME["forest_hover"], text_color=OOT_THEME["text"], command=self.open_output_folder).pack(fill="x", padx=12, pady=(0, 12))
 
     def create_main_area(self):
         self.main_area = ctk.CTkFrame(self, fg_color="transparent")
@@ -1118,9 +1118,9 @@ class ZeldaApp(ctk.CTk):
         log_frame.grid_columnconfigure(0, weight=1)
         log_frame.grid_rowconfigure(1, weight=1)
         ctk.CTkLabel(log_frame, text="Sheikah Log", text_color=OOT_THEME["gold"], font=ctk.CTkFont(size=16, weight="bold")).grid(row=0, column=0, sticky="w", padx=14, pady=(10, 4))
-        self.log_text = ctk.CTkTextbox(log_frame, height=150, fg_color="#0A0A0F", text_color=OOT_THEME["text"], border_width=1, border_color=OOT_THEME["gold"], font=("Consolas", 11))
+        self.log_text = ctk.CTkTextbox(log_frame, height=150, fg_color="#101712", text_color=OOT_THEME["text"], border_width=1, border_color=OOT_THEME["gold"], font=("Consolas", 11))
         self.log_text.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 12))
-        self.log("Terminal inicializada. Protocolos Sheikah activos.")
+        self.log("Santuario inicializado. Bienvenido al reino de los machotes.")
 
     def create_treeview(self, parent, columns):
         frame = ctk.CTkFrame(parent, fg_color="transparent")

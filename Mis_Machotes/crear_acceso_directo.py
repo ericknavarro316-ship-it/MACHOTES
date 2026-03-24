@@ -13,12 +13,12 @@ def create_desktop_shortcut():
 
         vbs_content = f"""
 Set oWS = WScript.CreateObject("WScript.Shell")
-sLinkFile = oWS.SpecialFolders("Desktop") & "\Terminal Sheikah.lnk"
+sLinkFile = oWS.SpecialFolders("Desktop") & "\Machotes Of Time.lnk"
 Set oLink = oWS.CreateShortcut(sLinkFile)
 oLink.TargetPath = "{sys.executable}"
 oLink.Arguments = "{start_app_path}"
 oLink.WorkingDirectory = "{base_dir}"
-oLink.Description = "Terminal Sheikah - Panel de Administración"
+oLink.Description = "Machotes Of Time - Panel de Administración"
 oLink.IconLocation = "{base_dir}\\triforce.ico"
 oLink.Save
 WScript.Echo sLinkFile
@@ -42,11 +42,11 @@ WScript.Echo sLinkFile
             print("No se pudo encontrar la carpeta del Escritorio.")
             return
 
-        shortcut_path = desktop_dir / "Terminal_Sheikah.desktop"
+        shortcut_path = desktop_dir / "Machotes_Of_Time.desktop"
 
         content = f"""[Desktop Entry]
 Version=1.0
-Name=Terminal Sheikah
+Name=Machotes Of Time
 Comment=Panel de Administración
 Exec={sys.executable} "{start_app_path}"
 Path={base_dir}
