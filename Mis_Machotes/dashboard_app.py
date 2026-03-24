@@ -1621,8 +1621,8 @@ class ZeldaApp(ctk.CTk):
         self.protocol("WM_DELETE_WINDOW", self.on_close)
         self.style_treeview()
         self.create_sidebar()
-        self.create_main_area()
         self.create_log_panel()
+        self.create_main_area()
 
         sys.stdout = RedirectText(self.log_text)
         sys.stderr = RedirectText(self.log_text)
