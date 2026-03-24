@@ -12,24 +12,8 @@ import argparse
 import unicodedata
 from datetime import datetime
 
-PATH_INVENTARIO = "machotes/Inventario_Final.xlsx"
-PATH_MACHOTE = "machotes/EJEMPLO MACHOTE.xlsx"
-PATH_PRECIOS = "machotes/Lista de precios ok.xlsx"
-OUTPUT_DIR = "machotes_generados"
-APP_DATA_DIR = os.path.join(os.path.dirname(__file__), "app_data")
-PDF_WARNINGS_LOG = os.path.join(APP_DATA_DIR, "pdf_parse_warnings.log")
-
-MAPEOS_MODELOS = {
-    "S2 AIR V2": "S2",
-    "HN-C80": "HN-C80 PRO",
-    "M2MAX": "M2MAX 8.5",
-    "M2MAXB": "M2MAXB10"
-}
-COLORES_VALIDOS = {
-    "VERDE", "ROJO", "AZUL", "ROSA", "BLANCO", "NEGRO",
-    "AMARILLO", "CAFE", "GRIS", "CAYENNE", "PURPURA", "PÚRPURA",
-}
-
+import core.config as config
+from database import db_manager
 
 def _es_token_color(token):
     if not token:
@@ -38,7 +22,7 @@ def _es_token_color(token):
     partes = [p.strip() for p in normalizado.split("/") if p.strip()]
     if not partes:
         return False
-    return all(parte in COLORES_VALIDOS for parte in partes)
+    return all(parte in config.COLORES_VALIDOS for parte in partes)
 
 
 def extraer_datos_empresa(empresa_busqueda):
@@ -131,29 +115,29 @@ def obtener_empresas_csf():
             empresas.append(nombre.upper())
     return sorted(set(empresas))
 
-import db_manager
+
 
 def load_data():
     if not db_manager.is_db_initialized():
         print("Base de datos SQLite no inicializada. Intentando migrar desde Excel...")
-        if os.path.exists(PATH_INVENTARIO):
-            if not db_manager.migrate_excel_to_sqlite(PATH_INVENTARIO):
+        if os.path.exists(config.PATH_INVENTARIO):
+            if not db_manager.migrate_excel_to_sqlite(config.PATH_INVENTARIO):
                 print("Aviso: No se pudo migrar Excel. Creando DB vacía.")
                 db_manager.create_empty_inventory()
         else:
-            print(f"No existe {PATH_INVENTARIO}. Inicializando BD limpia desde cero.")
+            print(f"No existe {config.PATH_INVENTARIO}. Inicializando BD limpia desde cero.")
             db_manager.create_empty_inventory()
 
     df_reporte, df_usados, df_xml = db_manager.get_inventory_dataframes()
         
-    if os.path.exists(PATH_PRECIOS):
-        df_precios = pd.read_excel(PATH_PRECIOS, sheet_name='Para imprimir', header=2)
+    if os.path.exists(config.PATH_PRECIOS):
+        df_precios = pd.read_excel(config.PATH_PRECIOS, sheet_name='Para imprimir', header=2)
         df_precios = df_precios[['CLAVE SAT', 'DESCRIPCION', 'MODELO', 'D1']]
         df_precios.dropna(subset=['MODELO'], inplace=True)
         df_precios['MODELO'] = df_precios['MODELO'].astype(str).str.strip().str.upper()
         df_precios['CLAVE SAT'] = df_precios['CLAVE SAT'].fillna(0).astype(int).astype(str)
     else:
-        print(f"Advertencia: Archivo de precios '{PATH_PRECIOS}' no encontrado. Precios serán $0.")
+        print(f"Advertencia: Archivo de precios '{config.PATH_PRECIOS}' no encontrado. Precios serán $0.")
         df_precios = pd.DataFrame(columns=['CLAVE SAT', 'DESCRIPCION', 'MODELO', 'D1'])
     
     return df_reporte, df_usados, df_xml, df_precios
@@ -162,7 +146,7 @@ def aplicar_mapeo(modelo_base):
     if pd.isna(modelo_base):
         return modelo_base
     modelo_upper = str(modelo_base).strip().upper()
-    return MAPEOS_MODELOS.get(modelo_upper, modelo_upper)
+    return config.MAPEOS_MODELOS.get(modelo_upper, modelo_upper)
 
 def procesar_inventario(df_reporte, df_precios, incluir_infantiles=False, incluir_motobicis=False, categoria="TODAS", modelos=None, sucursales=None):
     df = df_reporte.copy()
@@ -296,24 +280,24 @@ def seleccionar_articulos(df_disponibles, monto_objetivo):
     return df_resultado
 
 def generar_machote(df_seleccion, monto_objetivo, empresa, rfc, cuenta_mp):
-    if not os.path.exists(OUTPUT_DIR):
-        os.makedirs(OUTPUT_DIR)
+    if not os.path.exists(config.OUTPUT_DIR):
+        os.makedirs(config.OUTPUT_DIR)
         
     fecha_str = datetime.now().strftime("%d %b %Y").upper()
     total_real = df_seleccion['TOTAL'].sum()
     nombre_archivo = f"{fecha_str} ${total_real:,.2f} MACHOTE {empresa} {cuenta_mp}.xlsx"
-    ruta_salida = os.path.join(OUTPUT_DIR, nombre_archivo)
+    ruta_salida = os.path.join(config.OUTPUT_DIR, nombre_archivo)
     
     # Manejar caso donde el machote no exista
-    if not os.path.exists(PATH_MACHOTE):
-        print(f"ADVERTENCIA: No se encontró {PATH_MACHOTE}. Se generará uno vacío.")
+    if not os.path.exists(config.PATH_MACHOTE):
+        print(f"ADVERTENCIA: No se encontró {config.PATH_MACHOTE}. Se generará uno vacío.")
         wb = openpyxl.Workbook()
         ws = wb.active
         # Basic headers just in case
         for i, header in enumerate(['CANTIDAD', 'UNIDAD', 'CLAVE SAT', 'DESCRIPCION', 'P. UNITARIO', 'SUBTOTAL', 'IVA', 'TOTAL']):
             ws.cell(row=7, column=i+2).value = header
     else:
-        wb = openpyxl.load_workbook(PATH_MACHOTE)
+        wb = openpyxl.load_workbook(config.PATH_MACHOTE)
         ws = wb.active
     
     for row in range(1, 10):
@@ -383,9 +367,9 @@ def generar_machote(df_seleccion, monto_objetivo, empresa, rfc, cuenta_mp):
 def _guardar_warnings_pdf(ruta_pdf, warnings):
     if not warnings:
         return
-    os.makedirs(APP_DATA_DIR, exist_ok=True)
+    os.makedirs(config.APP_DATA_DIR, exist_ok=True)
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with open(PDF_WARNINGS_LOG, "a", encoding="utf-8") as fh:
+    with open(config.PDF_WARNINGS_LOG, "a", encoding="utf-8") as fh:
         fh.write(f"\n[{timestamp}] {ruta_pdf}\n")
         for warning in warnings:
             fh.write(f"- {warning}\n")
@@ -468,7 +452,7 @@ def extraer_nuevos_articulos(ruta_pdf, with_report=False):
         "bloques_detectados": bloques_detectados,
         "articulos_detectados": len(articulos_encontrados),
         "warnings": len(warnings),
-        "warnings_log": PDF_WARNINGS_LOG,
+        "warnings_log": config.PDF_WARNINGS_LOG,
     }
     if with_report:
         return articulos_encontrados, warnings, report
@@ -636,7 +620,7 @@ def actualizar_inventario_base(df_seleccion, nombre_machote):
     print("Actualizando SQLite Inventario...")
     series_usadas = df_seleccion['No de SERIE:'].tolist()
     db_manager.mark_items_as_used(series_usadas, nombre_machote)
-    return PATH_INVENTARIO
+    return config.PATH_INVENTARIO
 
 def importar_machote_externo(ruta_machote):
     import pandas as pd
@@ -706,7 +690,7 @@ def importar_machote_externo(ruta_machote):
     return list(series_coincidentes), len(series_encontradas)
 
 
-def _replace_inventory_file(nuevo_path, path_inventario=PATH_INVENTARIO):
+def _replace_inventory_file(nuevo_path, path_inventario=config.PATH_INVENTARIO):
     # This function is no longer actively replacing Excel files as SQLite is the source of truth,
     # but it remains as a no-op placeholder for any legacy imports.
     return path_inventario
@@ -759,13 +743,13 @@ def main():
     
     if args.xml_dir:
         print(f"Modo Validacion XML activado para carpeta: {args.xml_dir}")
-        actualizar_inventario_uuid(args.xml_dir, PATH_INVENTARIO)
+        actualizar_inventario_uuid(args.xml_dir, config.PATH_INVENTARIO)
         sys.exit(0)
 
     
     if args.cargar:
         print(f"Modo Carga activado para: {args.cargar}")
-        cargar_inventario(args.cargar, PATH_INVENTARIO)
+        cargar_inventario(args.cargar, config.PATH_INVENTARIO)
         sys.exit(0)
 
     # Intentar extraer datos del PDF de la Constancia de Situación Fiscal
@@ -787,7 +771,7 @@ if __name__ == '__main__':
     main()
 
 
-def _replace_inventory_file(nuevo_path, path_inventario=PATH_INVENTARIO):
+def _replace_inventory_file(nuevo_path, path_inventario=config.PATH_INVENTARIO):
     shutil = __import__("shutil")
     if not os.path.exists(nuevo_path):
         raise FileNotFoundError(f"No se encontró el archivo actualizado: {nuevo_path}")
@@ -798,14 +782,14 @@ def _replace_inventory_file(nuevo_path, path_inventario=PATH_INVENTARIO):
 def generar_machote_y_actualizar(df_seleccion, monto_objetivo, empresa, rfc, cuenta_mp):
     ruta_machote, nombre_machote = generar_machote(df_seleccion, monto_objetivo, empresa, rfc, cuenta_mp)
     actualizar_inventario_base(df_seleccion, nombre_machote)
-    return ruta_machote, nombre_machote, PATH_INVENTARIO
+    return ruta_machote, nombre_machote, config.PATH_INVENTARIO
 
 
-def cargar_inventario_y_reemplazar(ruta_pdf, path_inventario=PATH_INVENTARIO, lista_articulos=None):
+def cargar_inventario_y_reemplazar(ruta_pdf, path_inventario=config.PATH_INVENTARIO, lista_articulos=None):
     cargar_inventario(ruta_pdf, path_inventario, lista_articulos=lista_articulos)
     return path_inventario
 
 
-def validar_xml_y_reemplazar(xml_dir, path_inventario=PATH_INVENTARIO):
+def validar_xml_y_reemplazar(xml_dir, path_inventario=config.PATH_INVENTARIO):
     actualizar_inventario_uuid(xml_dir, path_inventario)
     return path_inventario

@@ -31,7 +31,6 @@ REQUIRED_MODULES = {
 REQUIRED_FILES = [
     BASE_DIR / "dashboard_app.py",
     BASE_DIR / "machote_generator.py",
-    BASE_DIR / "machotes" / "Inventario_Final.xlsx",
     BASE_DIR / "machotes" / "EJEMPLO MACHOTE.xlsx",
     BASE_DIR / "machotes" / "Lista de precios ok.xlsx",
 ]

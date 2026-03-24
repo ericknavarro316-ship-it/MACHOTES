@@ -1,5 +1,5 @@
 import pandas as pd
-import db_manager
+from database import db_manager
 import os
 from openpyxl.utils import get_column_letter
 

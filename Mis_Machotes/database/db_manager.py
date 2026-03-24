@@ -2,7 +2,9 @@ import sqlite3
 import pandas as pd
 import os
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "app_data", "inventory.db")
+# Go one level up to reach Mis_Machotes/app_data instead of Mis_Machotes/database/app_data
+BASE_DIR = os.path.dirname(os.path.dirname(__file__))
+DB_PATH = os.path.join(BASE_DIR, "app_data", "inventory.db")
 
 def get_connection():
     return sqlite3.connect(DB_PATH)
@@ -212,7 +214,6 @@ def insert_new_items(articulos):
 
     inserted = 0
     try:
-        conn.execute("BEGIN TRANSACTION")
         for art in articulos:
             try:
                 cursor.execute('''
@@ -249,6 +250,30 @@ def insert_new_items(articulos):
 
     print(f"Insertados {inserted} registros en SQLite.")
 
+def undo_last_import(series_list):
+    """Elimina articulos recien importados (Deshacer)"""
+    if not series_list:
+        return
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    placeholders = ','.join('?' * len(series_list))
+    query = f'''
+    DELETE FROM inventario
+    WHERE no_serie IN ({placeholders}) AND estado = 'DISPONIBLE'
+    '''
+    try:
+        cursor.execute(query, series_list)
+        deleted = cursor.rowcount
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        print(f"Error deshaciendo importacion: {e}")
+        raise
+    finally:
+        conn.close()
+    return deleted
+
 def mark_items_as_used(series_list, machote_name):
     """Mueve artículos de DISPONIBLE a USADO"""
     if not series_list:
@@ -267,7 +292,6 @@ def mark_items_as_used(series_list, machote_name):
     params = [machote_name] + list(series_list)
 
     try:
-        conn.execute("BEGIN TRANSACTION")
         cursor.execute(query, params)
         updated = cursor.rowcount
         conn.commit()
@@ -290,7 +314,6 @@ def mark_items_as_xml(series_uuid_dict):
 
     updated_total = 0
     try:
-        conn.execute("BEGIN TRANSACTION")
         for serie, uuid in series_uuid_dict.items():
             cursor.execute('''
             UPDATE inventario
