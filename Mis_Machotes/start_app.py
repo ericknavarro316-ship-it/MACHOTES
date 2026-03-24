@@ -2,6 +2,7 @@ from importlib.util import find_spec
 from pathlib import Path
 import argparse
 import os
+import re
 import runpy
 import shutil
 import sys
@@ -94,12 +95,12 @@ def collect_check_results():
     except Exception as e:
         raise RuntimeError(f"No se pudo leer dashboard_app.py: {e}") from e
 
-    REQUIRED_SNIPPETS = [
-        "class ZeldaApp(ctk.CTk):",
-        'if __name__ == "__main__":',
-        "app.mainloop()",
+    required_checks = [
+        ("bloque __main__", r'if\s+__name__\s*==\s*["\']__main__["\']'),
+        ("llamada a mainloop", r'\.mainloop\s*\('),
+        ("uso de customtkinter", r'ctk\.CTk'),
     ]
-    missing_snippets = [snippet for snippet in REQUIRED_SNIPPETS if snippet not in DASHBOARD_TEXT]
+    missing_snippets = [label for label, pattern in required_checks if not re.search(pattern, DASHBOARD_TEXT)]
     return missing, missing_files, missing_snippets
 
 
