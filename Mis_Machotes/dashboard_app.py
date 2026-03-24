@@ -1,6 +1,5 @@
 import json
 import os
-import shutil
 import sys
 import threading
 from datetime import datetime

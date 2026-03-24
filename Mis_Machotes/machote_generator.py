@@ -218,7 +218,7 @@ def seleccionar_articulos(df_disponibles, monto_objetivo):
     return df_resultado
 
 def generar_machote(df_seleccion, monto_objetivo, empresa, rfc, cuenta_mp):
-if not os.path.exists(OUTPUT_DIR):
+    if not os.path.exists(OUTPUT_DIR):
         os.makedirs(OUTPUT_DIR)
         
     fecha_str = datetime.now().strftime("%d %b %Y").upper()
