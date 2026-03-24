@@ -24,6 +24,20 @@ MAPEOS_MODELOS = {
     "M2MAX": "M2MAX 8.5",
     "M2MAXB": "M2MAXB10"
 }
+COLORES_VALIDOS = {
+    "VERDE", "ROJO", "AZUL", "ROSA", "BLANCO", "NEGRO",
+    "AMARILLO", "CAFE", "GRIS", "CAYENNE", "PURPURA", "PÚRPURA",
+}
+
+
+def _es_token_color(token):
+    if not token:
+        return False
+    normalizado = str(token).strip().upper().replace("-", "/")
+    partes = [p.strip() for p in normalizado.split("/") if p.strip()]
+    if not partes:
+        return False
+    return all(parte in COLORES_VALIDOS for parte in partes)
 
 
 def extraer_datos_empresa(empresa_busqueda):
@@ -359,9 +373,10 @@ def extraer_nuevos_articulos(ruta_pdf, with_report=False):
             nombre_completo = match_bloque.group(1).strip()
             partes_nombre = nombre_completo.split(" ")
             
-            if len(partes_nombre) > 1 and partes_nombre[-1].upper() in ['VERDE', 'ROJO', 'AZUL', 'ROSA', 'BLANCO', 'NEGRO', 'AMARILLO', 'CAFE', 'GRIS', 'CAYENNE', 'PURPURA', 'PÚRPURA']:
+            ultimo_token = partes_nombre[-1].upper() if partes_nombre else ""
+            if len(partes_nombre) > 1 and _es_token_color(ultimo_token):
                 modelo_actual = " ".join(partes_nombre[:-1])
-                color_actual = partes_nombre[-1].upper()
+                color_actual = ultimo_token.replace("-", "/")
             else:
                 modelo_actual = nombre_completo
                 color_actual = ""
@@ -369,8 +384,8 @@ def extraer_nuevos_articulos(ruta_pdf, with_report=False):
                     tokens = lineas[i + 1].strip().split()
                     if tokens:
                         siguiente = tokens[0]
-                        if re.match(r"^[A-ZÚ]+", siguiente) and siguiente not in ["L1LTWT", "HWM7MTEZA", "LU5RMC"]:
-                            color_actual = siguiente
+                        if _es_token_color(siguiente) and siguiente not in ["L1LTWT", "HWM7MTEZA", "LU5RMC"]:
+                            color_actual = siguiente.upper().replace("-", "/")
                     else:
                         warnings.append(f"Línea {i + 2} vacía al intentar detectar color para '{nombre_completo}'.")
             
