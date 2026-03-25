@@ -87,14 +87,19 @@ class DashboardView(BaseView):
         self.chart_container = ctk.CTkFrame(pie_card, fg_color="transparent")
         self.chart_container.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 12))
 
-        bar_card = ctk.CTkFrame(charts_row, fg_color=CURRENT_THEME["panel"], corner_radius=18, border_width=1, border_color=CURRENT_THEME["gold"])
-        bar_card.grid(row=0, column=1, sticky="nsew", padx=(9, 0))
-        bar_card.grid_rowconfigure(1, weight=1)
-        bar_card.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(bar_card, text="Top 10 Modelos (Stock)", font=ctk.CTkFont(size=18, weight="bold"), text_color=CURRENT_THEME["gold"]).grid(row=0, column=0, sticky="w", padx=18, pady=(14, 6))
-        self.bar_chart_container = ctk.CTkFrame(bar_card, fg_color="transparent")
-        self.bar_chart_container.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 12))
-        self.bar_chart_canvas = None
+        summary_card = ctk.CTkFrame(charts_row, fg_color=CURRENT_THEME["panel"], corner_radius=18, border_width=1, border_color=CURRENT_THEME["gold"])
+        summary_card.grid(row=0, column=1, sticky="nsew", padx=(9, 0))
+        summary_card.grid_rowconfigure(1, weight=1)
+        summary_card.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(summary_card, text="Resumen por Sucursal (Doble clic para ir a inventario)", font=ctk.CTkFont(size=18, weight="bold"), text_color=CURRENT_THEME["gold"]).grid(row=0, column=0, sticky="w", padx=18, pady=(14, 6))
+        self.summary_tree = self.app.create_treeview(summary_card, [
+            ("sucursal", "Sucursal", 160),
+            ("cantidad", "Cantidad", 100),
+            ("porcentaje", "% del total", 110),
+            ("total", "Total", 140),
+        ])
+        self.summary_tree.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 12))
+        self.summary_tree.bind("<Double-1>", self.on_summary_double_click)
 
         # Middle comparative row
         mid_row = ctk.CTkFrame(content, fg_color="transparent")
@@ -112,19 +117,18 @@ class DashboardView(BaseView):
         self.state_chart_container.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 12))
         self.state_chart_canvas = None
 
-        summary_card = ctk.CTkFrame(mid_row, fg_color=CURRENT_THEME["panel"], corner_radius=18, border_width=1, border_color=CURRENT_THEME["gold"])
-        summary_card.grid(row=0, column=1, sticky="nsew", padx=(9, 0))
-        summary_card.grid_rowconfigure(1, weight=1)
-        summary_card.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(summary_card, text="Resumen por Sucursal (Doble clic para ir a inventario)", font=ctk.CTkFont(size=18, weight="bold"), text_color=CURRENT_THEME["gold"]).grid(row=0, column=0, sticky="w", padx=18, pady=(14, 6))
-        self.summary_tree = self.app.create_treeview(summary_card, [
+        branch_state_card = ctk.CTkFrame(mid_row, fg_color=CURRENT_THEME["panel"], corner_radius=18, border_width=1, border_color=CURRENT_THEME["gold"])
+        branch_state_card.grid(row=0, column=1, sticky="nsew", padx=(9, 0))
+        branch_state_card.grid_rowconfigure(1, weight=1)
+        branch_state_card.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(branch_state_card, text="Desglose de Estados por Sucursal (100%)", font=ctk.CTkFont(size=18, weight="bold"), text_color=CURRENT_THEME["gold"]).grid(row=0, column=0, sticky="w", padx=18, pady=(14, 6))
+        self.branch_state_tree = self.app.create_treeview(branch_state_card, [
             ("sucursal", "Sucursal", 160),
-            ("cantidad", "Cantidad", 100),
-            ("porcentaje", "% del total", 110),
-            ("total", "Total", 140),
+            ("disp", "% Disponibles", 110),
+            ("usados", "% Usados", 110),
+            ("xml", "% XML", 110),
         ])
-        self.summary_tree.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 12))
-        self.summary_tree.bind("<Double-1>", self.on_summary_double_click)
+        self.branch_state_tree.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 12))
 
     def _metric_card(self, parent, column, title, value, key):
         card = ctk.CTkFrame(parent, fg_color=CURRENT_THEME["panel_alt"], corner_radius=16, border_width=1, border_color=CURRENT_THEME["gold"])
@@ -189,6 +193,7 @@ class DashboardView(BaseView):
 
         self.draw_chart(total_df)
         self.draw_state_chart(rep_df, us_df, xml_df)
+        self.populate_branch_state_tree(rep_df, us_df, xml_df)
 
     def on_period_change(self, selected_period):
         now = pd.Timestamp.now().normalize()
@@ -488,53 +493,6 @@ class DashboardView(BaseView):
         self.chart_canvas.draw()
         self.chart_canvas.get_tk_widget().pack(fill="both", expand=True)
 
-        if self.bar_chart_canvas:
-            self.bar_chart_canvas.get_tk_widget().destroy()
-
-        fig2 = Figure(figsize=(5.4, 4.2), dpi=100, facecolor=CURRENT_THEME["panel"])
-        ax2 = fig2.add_subplot(111)
-        ax2.set_facecolor(CURRENT_THEME["panel"])
-
-        if not total_df.empty and "MODELO BASE" in total_df.columns:
-            counts_mods = total_df["MODELO BASE"].fillna("SIN MODELO").value_counts()
-            top_mods = counts_mods.head(10)
-
-            x = range(len(top_mods))
-            colors = [CURRENT_THEME["sky"], CURRENT_THEME["gold"], CURRENT_THEME["emerald"], CURRENT_THEME["warning"], CURRENT_THEME["danger"], CURRENT_THEME["forest"]]
-            colors_cycle = [colors[i % len(colors)] for i in range(len(top_mods))]
-
-            bars = ax2.bar(x, top_mods.values, color=colors_cycle)
-            ax2.set_xticks(x)
-
-            # Truncate long model names
-            labels = [str(label)[:12] + '...' if len(str(label)) > 15 else str(label) for label in top_mods.index]
-            ax2.set_xticklabels(labels, rotation=45, ha='right', color=CURRENT_THEME["text"], fontsize=8)
-            ax2.tick_params(axis='y', colors=CURRENT_THEME["text"])
-
-            # Spines
-            for spine in ax2.spines.values():
-                spine.set_color(CURRENT_THEME["gold"])
-                spine.set_linewidth(0.5)
-
-            # Labels on top of bars
-            for bar in bars:
-                height = bar.get_height()
-                ax2.annotate(f'{height}',
-                             xy=(bar.get_x() + bar.get_width() / 2, height),
-                             xytext=(0, 3),
-                             textcoords="offset points",
-                             ha='center', va='bottom', color=CURRENT_THEME["text"], fontsize=8)
-
-            ax2.set_title("Top 10 Modelos por Cantidad", color=CURRENT_THEME["gold"], fontsize=12)
-        else:
-            ax2.text(0.5, 0.5, "No hay datos aún", color=CURRENT_THEME["text"], ha="center", va="center")
-            ax2.axis("off")
-
-        fig2.tight_layout()
-        self.bar_chart_canvas = FigureCanvasTkAgg(fig2, master=self.bar_chart_container)
-        self.bar_chart_canvas.draw()
-        self.bar_chart_canvas.get_tk_widget().pack(fill="both", expand=True)
-
     def draw_state_chart(self, rep_df, us_df, xml_df):
         if self.state_chart_canvas:
             self.state_chart_canvas.get_tk_widget().destroy()
@@ -563,3 +521,39 @@ class DashboardView(BaseView):
         self.state_chart_canvas = FigureCanvasTkAgg(fig, master=self.state_chart_container)
         self.state_chart_canvas.draw()
         self.state_chart_canvas.get_tk_widget().pack(fill="both", expand=True)
+
+    def populate_branch_state_tree(self, rep_df, us_df, xml_df):
+        for item in self.branch_state_tree.get_children():
+            self.branch_state_tree.delete(item)
+
+        branch_stats = {}
+        def count_branch(df, state_key):
+            if df is not None and not df.empty and "SUCURSAL" in df.columns:
+                counts = df["SUCURSAL"].fillna("SIN SUCURSAL").value_counts()
+                for sucursal, qty in counts.items():
+                    if sucursal not in branch_stats:
+                        branch_stats[sucursal] = {"disp": 0, "usados": 0, "xml": 0, "total": 0}
+                    branch_stats[sucursal][state_key] += qty
+                    branch_stats[sucursal]["total"] += qty
+
+        count_branch(rep_df, "disp")
+        count_branch(us_df, "usados")
+        count_branch(xml_df, "xml")
+
+        sorted_branches = sorted(branch_stats.items(), key=lambda item: item[1]["total"], reverse=True)
+
+        for sucursal, stats in sorted_branches:
+            total = stats["total"]
+            if total == 0:
+                continue
+
+            pct_disp = (stats["disp"] / total) * 100
+            pct_usados = (stats["usados"] / total) * 100
+            pct_xml = (stats["xml"] / total) * 100
+
+            self.branch_state_tree.insert("", "end", values=(
+                str(sucursal),
+                f"{pct_disp:.1f}%",
+                f"{pct_usados:.1f}%",
+                f"{pct_xml:.1f}%"
+            ))
