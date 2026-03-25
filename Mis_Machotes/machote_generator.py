@@ -385,6 +385,76 @@ def _guardar_warnings_pdf(ruta_pdf, warnings):
             fh.write(f"- {warning}\n")
 
 
+def extraer_nuevos_articulos_excel(ruta_excel, with_report=False):
+    import pandas as pd
+    import os
+
+    articulos_encontrados = []
+    warnings = []
+
+    try:
+        # Load the REPORTE sheet, assuming standard format with header at row 3 (0-indexed 3 is row 4)
+        # We will try a few header rows just in case
+        df = None
+        for h in [3, 2, 1, 0]:
+            try:
+                temp_df = pd.read_excel(ruta_excel, sheet_name='REPORTE', header=h)
+                if 'No de SERIE:' in temp_df.columns:
+                    df = temp_df
+                    break
+            except Exception:
+                pass
+
+        if df is None:
+            # Fallback to first sheet if REPORTE doesn't exist
+            df = pd.read_excel(ruta_excel, header=0)
+            if 'No de SERIE:' not in df.columns:
+                # Try finding the series column heuristically
+                for col in df.columns:
+                    if 'SERIE' in str(col).upper():
+                        df = df.rename(columns={col: 'No de SERIE:'})
+                        break
+
+        if 'No de SERIE:' not in df.columns:
+            warnings.append(f"No se encontró la columna 'No de SERIE:' en el archivo {os.path.basename(ruta_excel)}.")
+            if with_report:
+                return [], warnings, {"error": "Columna de serie faltante"}
+            return []
+
+        df = df.dropna(subset=['No de SERIE:'])
+
+        for idx, row in df.iterrows():
+            serie = str(row.get('No de SERIE:', '')).strip()
+            if len(serie) > 5 and serie.isalnum() and serie != "nan":
+                articulo = {
+                    'SUCURSAL': str(row.get('SUCURSAL', 'ALMACEN')).strip(),
+                    'MODELO BASE': str(row.get('MODELO BASE', row.get('MODELO', 'SIN MODELO'))).strip(),
+                    'COLOR': str(row.get('COLOR', '')).strip().upper(),
+                    'No de SERIE:': serie,
+                    'CANTIDAD': 1
+                }
+                if articulo['COLOR'] == 'NAN': articulo['COLOR'] = ''
+                if articulo['SUCURSAL'] == 'nan': articulo['SUCURSAL'] = 'ALMACEN'
+                if articulo['MODELO BASE'] == 'nan': articulo['MODELO BASE'] = 'SIN MODELO'
+
+                articulos_encontrados.append(articulo)
+
+    except Exception as e:
+        warnings.append(f"Error procesando Excel: {e}")
+
+    report = {
+        "lineas_analizadas": len(articulos_encontrados),
+        "bloques_detectados": len(articulos_encontrados),
+        "articulos_detectados": len(articulos_encontrados),
+        "warnings": len(warnings),
+        "warnings_log": config.PDF_WARNINGS_LOG,
+    }
+
+    if with_report:
+        return articulos_encontrados, warnings, report
+    return articulos_encontrados
+
+
 def extraer_nuevos_articulos(ruta_pdf, with_report=False):
     import pdfplumber
     import re

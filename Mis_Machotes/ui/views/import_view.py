@@ -30,11 +30,12 @@ class ImportView(BaseView):
         top = ctk.CTkFrame(card, fg_color="transparent")
         top.grid(row=0, column=0, sticky="ew", padx=18, pady=(18, 10))
         ctk.CTkButton(top, text="Elegir PDF", fg_color=CURRENT_THEME["gold"], hover_color=CURRENT_THEME["gold_hover"], text_color="#221A0C", command=self.select_pdf).pack(side="left")
-        ctk.CTkButton(top, text="Limpiar selección", fg_color=CURRENT_THEME["panel_alt"], hover_color=CURRENT_THEME["panel"], command=self.clear_loaded_pdf).pack(side="left", padx=(10, 0))
-        ctk.CTkButton(top, text="Simular importación", fg_color=CURRENT_THEME["warning"], hover_color="#A55A18", command=self.simulate_import).pack(side="left", padx=10)
-        ctk.CTkButton(top, text="Ver warnings", fg_color=CURRENT_THEME["panel_alt"], hover_color=CURRENT_THEME["panel"], command=self.show_parse_warnings).pack(side="left", padx=(0, 10))
-        ctk.CTkButton(top, text="Importar mercancía", fg_color=CURRENT_THEME["forest"], hover_color=CURRENT_THEME["forest_hover"], command=self.import_pdf).pack(side="left", padx=10)
-        ctk.CTkButton(top, text="Deshacer última carga", fg_color=CURRENT_THEME["danger"], hover_color=CURRENT_THEME["danger_hover"], command=self.undo_last_import).pack(side="left", padx=10)
+        ctk.CTkButton(top, text="Elegir Excel", fg_color=CURRENT_THEME["gold"], hover_color=CURRENT_THEME["gold_hover"], text_color="#221A0C", command=self.select_excel).pack(side="left", padx=(10, 0))
+        ctk.CTkButton(top, text="Limpiar", width=60, fg_color=CURRENT_THEME["panel_alt"], hover_color=CURRENT_THEME["panel"], command=self.clear_loaded_pdf).pack(side="left", padx=(10, 0))
+        ctk.CTkButton(top, text="Simular", width=60, fg_color=CURRENT_THEME["warning"], hover_color="#A55A18", command=self.simulate_import).pack(side="left", padx=10)
+        ctk.CTkButton(top, text="Warnings", width=70, fg_color=CURRENT_THEME["panel_alt"], hover_color=CURRENT_THEME["panel"], command=self.show_parse_warnings).pack(side="left", padx=(0, 10))
+        ctk.CTkButton(top, text="Importar", width=80, fg_color=CURRENT_THEME["forest"], hover_color=CURRENT_THEME["forest_hover"], command=self.import_pdf).pack(side="left", padx=10)
+        ctk.CTkButton(top, text="Deshacer", width=80, fg_color=CURRENT_THEME["danger"], hover_color=CURRENT_THEME["danger_hover"], command=self.undo_last_import).pack(side="left", padx=10)
         ctk.CTkLabel(top, textvariable=self.selected_pdf, text_color=CURRENT_THEME["text"]).pack(side="left", padx=8)
 
         self.progress_bar = ctk.CTkProgressBar(card, fg_color=CURRENT_THEME["panel_alt"], progress_color=CURRENT_THEME["gold"], height=4)
@@ -111,6 +112,42 @@ class ImportView(BaseView):
         if self.parse_warnings:
             self.app.log(f"Advertencias de parseo PDF: {len(self.parse_warnings)} (ver {self.parse_report.get('warnings_log', 'log')})")
         self.app.log(f"PDF(s) analizado(s): {len(self.selected_pdfs)} con {len(self.items_loaded)} artículos únicos detectados.")
+
+    def select_excel(self):
+        excel_path = filedialog.askopenfilename(title="Seleccionar Excel de mercancía", filetypes=[("Excel", "*.xlsx *.xls")])
+        if not excel_path:
+            return
+        self.selected_pdfs = [excel_path]  # Reuse the same variable for simplicity
+        self.selected_pdf.set(f"Excel seleccionado: {os.path.basename(excel_path)}")
+
+        try:
+            items, warnings, report = mg.extraer_nuevos_articulos_excel(excel_path, with_report=True)
+            for it in items:
+                it["_source_pdf"] = os.path.basename(excel_path)
+            self.items_loaded = items
+            self.parse_warnings = warnings
+            self.parse_report = report
+        except Exception as exc:
+            messagebox.showerror("Error", f"No se pudo procesar el Excel:\n{exc}")
+            return
+
+        for item in self.preview_tree.get_children():
+            self.preview_tree.delete(item)
+
+        for idx, item in enumerate(self.items_loaded):
+            color_display = self._format_color_for_display(item.get("COLOR", ""))
+            self.preview_tree.insert("", "end", values=("[X]", item.get("_source_pdf", ""), item.get("SUCURSAL", ""), item.get("MODELO BASE", ""), color_display, item.get("No de SERIE:", "")), tags=(str(idx),))
+
+        inv = self.app.get_inventory_data(refresh=False) or {}
+        existentes = set()
+        for key in ("reporte", "usados", "xml"):
+            df = inv.get(key)
+            if df is not None and not df.empty and "No de SERIE:" in df.columns:
+                existentes.update(df["No de SERIE:"].astype(str).str.strip().tolist())
+
+        duplicados = sum(1 for item in self.items_loaded if str(item.get("No de SERIE:", "")).strip() in existentes)
+        self.summary_label.configure(text=f"Se detectaron {len(self.items_loaded)} artículos únicos en el Excel ({duplicados} potencialmente duplicados).")
+        self.app.log(f"Excel analizado: {os.path.basename(excel_path)} con {len(self.items_loaded)} artículos.")
 
     def _format_color_for_display(self, color_value):
         return format_color_for_display(color_value)
