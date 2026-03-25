@@ -27,6 +27,7 @@ REQUIRED_MODULES = {
     "pdfplumber": "pdfplumber",
     "fitz": "pymupdf",
     "openpyxl": "openpyxl",
+    "plyer": "plyer"
 }
 REQUIRED_FILES = [
     BASE_DIR / "dashboard_app.py",

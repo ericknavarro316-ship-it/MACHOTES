@@ -6,6 +6,7 @@ from datetime import datetime
 
 import machote_generator as mg
 from ui.components import BaseView, format_color_for_display, CURRENT_THEME
+from plyer import notification
 
 class ImportView(BaseView):
     title = "Puerto Mercante"
@@ -278,6 +279,15 @@ class ImportView(BaseView):
         self.summary_label.configure(text=f"Carga completa. {len(selected_items)} artículos importados en DB.", text_color=CURRENT_THEME["emerald"])
         self.app.log(f"Reporte post-carga: seleccionados={len(selected_items)} warnings_parseo={len(self.parse_warnings)}")
         self.app.log(f"Mercancía importada: {len(selected_items)} piezas desde {len(pdf_paths)} PDF(s).")
+        try:
+            notification.notify(
+                title="MACHOTES OF TIME",
+                message=f"Carga completada: {len(selected_items)} piezas guardadas en base de datos.",
+                app_name="MACHOTES OF TIME",
+                timeout=5
+            )
+        except Exception as e:
+            self.app.log(f"No se pudo mostrar la notificación nativa: {e}")
         messagebox.showinfo("Carga completada", f"Se guardaron {len(selected_items)} piezas en base de datos.")
 
     def _import_error(self, exc):

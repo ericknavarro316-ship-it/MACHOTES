@@ -4,3 +4,4 @@ matplotlib
 pdfplumber
 pymupdf
 openpyxl
+plyer

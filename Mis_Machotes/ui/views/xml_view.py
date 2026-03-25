@@ -2,6 +2,7 @@ import customtkinter as ctk
 from tkinter import filedialog, messagebox
 import machote_generator as mg
 from ui.components import BaseView, CURRENT_THEME
+from plyer import notification
 
 class XMLView(BaseView):
     title = "Templo de UUID"
@@ -83,6 +84,15 @@ class XMLView(BaseView):
         self.app.history_view.refresh()
         self.summary_label.configure(text="Sincronización de UUID completada.", text_color=CURRENT_THEME["emerald"])
         self.app.log(f"XMLs conciliados desde {folder}")
+        try:
+            notification.notify(
+                title="MACHOTES OF TIME",
+                message="Validación XML completada y UUIDs cruzados con el inventario.",
+                app_name="MACHOTES OF TIME",
+                timeout=5
+            )
+        except Exception as e:
+            self.app.log(f"No se pudo mostrar la notificación nativa: {e}")
         messagebox.showinfo("XML conciliados", f"Inventario actualizado en base de datos.")
 
     def _process_error(self, exc):
