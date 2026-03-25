@@ -12,36 +12,47 @@ class InventoryView(BaseView):
     def __init__(self, master, app):
         super().__init__(master, app)
         self.create_header()
-        self.grid_rowconfigure(3, weight=1)
-        controls = ctk.CTkFrame(self, fg_color="transparent")
-        controls.grid(row=1, column=0, sticky="ew", padx=18, pady=(0, 12))
-        controls.grid_columnconfigure(3, weight=1)
+        self.grid_rowconfigure(3, weight=0)
+        # Row 1: Filters & Search
+        filter_controls = ctk.CTkFrame(self, fg_color="transparent")
+        filter_controls.grid(row=1, column=0, sticky="ew", padx=18, pady=(0, 6))
+        filter_controls.grid_columnconfigure(3, weight=1)
 
-        self.sucursal_opt = MultiSelectMenu(controls, title="Sucursal", values=[], command=self.refresh, fg_color=CURRENT_THEME["panel_alt"], hover_color=CURRENT_THEME["panel"])
+        self.sucursal_opt = MultiSelectMenu(filter_controls, title="Sucursal", values=[], command=self.refresh, fg_color=CURRENT_THEME["panel_alt"], hover_color=CURRENT_THEME["panel"])
         self.sucursal_opt.grid(row=0, column=0, padx=(0, 10), sticky="w")
 
-        self.modelo_opt = MultiSelectMenu(controls, title="Modelo", values=[], command=self.refresh, fg_color=CURRENT_THEME["panel_alt"], hover_color=CURRENT_THEME["panel"])
+        self.modelo_opt = MultiSelectMenu(filter_controls, title="Modelo", values=[], command=self.refresh, fg_color=CURRENT_THEME["panel_alt"], hover_color=CURRENT_THEME["panel"])
         self.modelo_opt.grid(row=0, column=1, padx=(0, 10), sticky="w")
 
-        ctk.CTkLabel(controls, text="Buscar:", text_color=CURRENT_THEME["text"]).grid(row=0, column=2, padx=(0, 10), sticky="w")
-        self.search_entry = ctk.CTkEntry(controls, placeholder_text="serie, color...")
+        ctk.CTkLabel(filter_controls, text="Buscar:", text_color=CURRENT_THEME["text"]).grid(row=0, column=2, padx=(0, 10), sticky="w")
+        self.search_entry = ctk.CTkEntry(filter_controls, placeholder_text="serie, color...")
         self.search_entry.grid(row=0, column=3, sticky="ew")
         self.search_entry.bind("<KeyRelease>", lambda _e: self.refresh())
-        ctk.CTkButton(controls, text="X Filtros", fg_color=CURRENT_THEME["danger"], hover_color=CURRENT_THEME["danger_hover"], command=self.clear_filters).grid(row=0, column=4, padx=(10, 0))
-        self.active_filters_label = ctk.CTkLabel(controls, text="Filtros activos: 0", text_color=CURRENT_THEME["muted"])
-        self.active_filters_label.grid(row=0, column=8, padx=(12, 0), sticky="e")
 
-        ctk.CTkButton(controls, text="Exportar Excel Completo", fg_color=CURRENT_THEME["gold"], hover_color=CURRENT_THEME["gold_hover"], text_color="#221A0C", command=self.export_full_excel).grid(row=0, column=5, padx=(10, 0))
-        ctk.CTkButton(controls, text="Exportar Vista", fg_color=CURRENT_THEME["emerald"], hover_color=CURRENT_THEME["forest_hover"], command=self.export_view).grid(row=0, column=6, padx=10)
-        ctk.CTkButton(controls, text="Recargar", fg_color=CURRENT_THEME["forest"], hover_color=CURRENT_THEME["forest_hover"], command=lambda: self.app.refresh_data(force=True)).grid(row=0, column=7)
+        ctk.CTkButton(filter_controls, text="X Filtros", width=80, fg_color=CURRENT_THEME["danger"], hover_color=CURRENT_THEME["danger_hover"], command=self.clear_filters).grid(row=0, column=4, padx=(10, 0), sticky="e")
+        self.active_filters_label = ctk.CTkLabel(filter_controls, text="Filtros activos: 0", width=120, text_color=CURRENT_THEME["muted"])
+        self.active_filters_label.grid(row=0, column=5, padx=(10, 0), sticky="e")
+
+        # Row 2: Actions & Recargar
+        action_controls = ctk.CTkFrame(self, fg_color="transparent")
+        action_controls.grid(row=2, column=0, sticky="ew", padx=18, pady=(0, 12))
+        action_controls.grid_columnconfigure(0, weight=1)
+
+        btn_container = ctk.CTkFrame(action_controls, fg_color="transparent")
+        btn_container.grid(row=0, column=0, sticky="e")
+
+        ctk.CTkButton(btn_container, text="Exportar Vista Actual", width=150, fg_color=CURRENT_THEME["emerald"], hover_color=CURRENT_THEME["forest_hover"], command=self.export_view).pack(side="left", padx=(0, 10))
+        ctk.CTkButton(btn_container, text="Exportar Excel Completo", width=170, fg_color=CURRENT_THEME["gold"], hover_color=CURRENT_THEME["gold_hover"], text_color="#221A0C", command=self.export_full_excel).pack(side="left", padx=(0, 10))
+        ctk.CTkButton(btn_container, text="Recargar DB", width=100, fg_color=CURRENT_THEME["forest"], hover_color=CURRENT_THEME["forest_hover"], command=lambda: self.app.refresh_data(force=True)).pack(side="left")
 
         totals_frame = ctk.CTkFrame(self, fg_color=CURRENT_THEME["panel_alt"], corner_radius=8)
-        totals_frame.grid(row=2, column=0, sticky="ew", padx=18)
+        totals_frame.grid(row=3, column=0, sticky="ew", padx=18)
         self.lbl_totals = ctk.CTkLabel(totals_frame, text="0 piezas visibles · Total: $0.00", text_color=CURRENT_THEME["gold"], font=ctk.CTkFont(weight="bold"))
         self.lbl_totals.pack(padx=14, pady=6, anchor="e")
 
+        self.grid_rowconfigure(4, weight=1)
         self.tabview = ctk.CTkTabview(self, fg_color=CURRENT_THEME["panel"], segmented_button_selected_color=CURRENT_THEME["gold"], segmented_button_selected_hover_color=CURRENT_THEME["gold_hover"], segmented_button_unselected_color=CURRENT_THEME["panel_alt"], command=self.refresh_totals)
-        self.tabview.grid(row=3, column=0, sticky="nsew", padx=18, pady=(0, 18))
+        self.tabview.grid(row=4, column=0, sticky="nsew", padx=18, pady=(0, 18))
         self.trees = {}
         for tab_name in ["Disponibles", "Usados", "XML"]:
             tab = self.tabview.add(tab_name)
