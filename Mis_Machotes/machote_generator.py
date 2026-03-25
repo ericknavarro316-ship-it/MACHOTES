@@ -211,66 +211,76 @@ def procesar_inventario(df_reporte, df_precios, incluir_infantiles=False, inclui
 def seleccionar_articulos(df_disponibles, monto_objetivo):
     import random
     
-    # Asegurar que el algoritmo intenta diferentes combinaciones
     mejor_diferencia = float('inf')
     mejor_combinacion = []
     
     items = df_disponibles.to_dict('records')
-    
-    # Para hacer que tome modelos más variados, en lugar de tomar secuencialmente, 
-    # intentaremos tomar muestras aleatorias repetidas veces (Monte Carlo)
-    # y nos quedamos con la que se acerque más al objetivo.
-    
-    # 1. Intentos deterministas basicos (orden ascendente y descendente)
-    df_sorted = df_disponibles.sort_values(by=['D1', 'SUCURSAL', 'MODELO BASE', 'No de SERIE:'])
-    items_sorted = df_sorted.to_dict('records')
-    
-    for i in range(min(50, len(items_sorted))):
-        suma_actual = 0
-        seleccion_actual = []
-        for j in range(i, len(items_sorted)):
-            item = items_sorted[j]
-            if suma_actual + item['TOTAL'] <= monto_objetivo + 50:
-                seleccion_actual.append(item)
-                suma_actual += item['TOTAL']
-        diferencia = abs(monto_objetivo - suma_actual)
-        if diferencia < mejor_diferencia or (diferencia == mejor_diferencia and len(seleccion_actual) > len(mejor_combinacion)):
-            mejor_diferencia = diferencia
-            mejor_combinacion = seleccion_actual
-            
-    # 2. Intentos puramente aleatorios (Monte Carlo) - Iterar 500 veces mezclando el inventario
-    # Esto asegura que "pique" de diferentes modelos en lugar de acabarse un solo producto primero
-    for _ in range(500):
+    if not items:
+        import pandas as pd
+        return pd.DataFrame()
+
+    # 1. Greedy Aleatorizado con Refinamiento (Local Search)
+    # Hacemos 800 iteraciones para garantizar variedad, pero en cada una aplicamos "relleno fino"
+    for _ in range(800):
+        # Revolver el inventario completamente (mantiene la variedad y no repite modelos)
         random.shuffle(items)
         
         suma_actual = 0
         seleccion_actual = []
         
-        for item in items:
-            # Tomamos un articulo al azar, si cabe lo metemos
-            if suma_actual + item['TOTAL'] <= monto_objetivo + 50: # Permitir 50 de tolerancia por arriba
+        # Fase 1: Llenado Greedy Aleatorio (hasta llegar o pasarse muy poquito)
+        idx_corte = 0
+        for i, item in enumerate(items):
+            if suma_actual + item['TOTAL'] <= monto_objetivo + 100: # Tolerancia inicial amplia
                 seleccion_actual.append(item)
                 suma_actual += item['TOTAL']
-                
-            # Si ya nos pasamos de una tolerancia muy chica, paramos esta iteracion para ahorrar tiempo
-            if suma_actual > monto_objetivo + 50:
+            elif suma_actual > monto_objetivo:
+                idx_corte = i
                 break
+
+        diferencia_inicial = abs(monto_objetivo - suma_actual)
+
+        # Fase 2: Refinamiento Fino (Tratar de buscar la pieza exacta en lo que sobró del inventario)
+        # Si no le atinamos exacto, intentamos agregar UNA pieza más de las sobrantes que encaje perfecto
+        if diferencia_inicial > 0.01 and idx_corte < len(items):
+            faltante = monto_objetivo - suma_actual
+
+            # Buscar en los que sobraron (items[idx_corte:]) el que más se acerque al faltante sin pasarse por mucho
+            mejor_pieza_relleno = None
+            mejor_diff_relleno = diferencia_inicial
+
+            for j in range(idx_corte, len(items)):
+                item_relleno = items[j]
+                nueva_suma = suma_actual + item_relleno['TOTAL']
+                nueva_diff = abs(monto_objetivo - nueva_suma)
+
+                # Si agregar esta pieza nos acerca más al objetivo que como estábamos antes
+                if nueva_diff < mejor_diff_relleno:
+                    mejor_diff_relleno = nueva_diff
+                    mejor_pieza_relleno = item_relleno
+
+                    if nueva_diff < 0.01: # Encontramos la pieza exacta
+                        break
+
+            if mejor_pieza_relleno:
+                seleccion_actual.append(mejor_pieza_relleno)
+                suma_actual += mejor_pieza_relleno['TOTAL']
                 
-        diferencia = abs(monto_objetivo - suma_actual)
+        diferencia_final = abs(monto_objetivo - suma_actual)
         
-        # Guardar si es una aproximacion mas exacta (o igual pero con MAS renglones)
-        # Esto fomenta combinar artículos baratos y caros aleatoriamente
-        if diferencia < mejor_diferencia:
-            mejor_diferencia = diferencia
-            mejor_combinacion = seleccion_actual
-        elif diferencia == mejor_diferencia and len(seleccion_actual) > len(mejor_combinacion):
-            mejor_combinacion = seleccion_actual
+        # Guardamos la mejor combinación histórica
+        if diferencia_final < mejor_diferencia:
+            mejor_diferencia = diferencia_final
+            mejor_combinacion = list(seleccion_actual)
+        # En caso de empate (misma diferencia), preferimos la que involucre MÁS piezas (mayor volumen movido)
+        elif abs(diferencia_final - mejor_diferencia) < 0.01 and len(seleccion_actual) > len(mejor_combinacion):
+            mejor_combinacion = list(seleccion_actual)
             
-        # Si encuentra el exacto, podemos dejar de iterar
-        if mejor_diferencia == 0:
+        # Si logramos el objetivo matemático exacto (o a centavos), podemos terminar temprano
+        if mejor_diferencia < 0.01:
             break
             
-    # Finalmente, para mantener el desempate por modelo/serie como dice la regla H, 
+    # Finalmente, para mantener consistencia en la visualización,
     # ordenamos la combinacion ganadora antes de devolverla
     import pandas as pd
     df_resultado = pd.DataFrame(mejor_combinacion)
