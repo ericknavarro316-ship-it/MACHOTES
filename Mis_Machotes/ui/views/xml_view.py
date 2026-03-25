@@ -24,14 +24,19 @@ class XMLView(BaseView):
         ctk.CTkButton(top, text="Validar y actualizar", fg_color=CURRENT_THEME["forest"], hover_color=CURRENT_THEME["forest_hover"], command=self.process_xml).pack(side="left", padx=10)
         ctk.CTkLabel(top, textvariable=self.selected_dir, text_color=CURRENT_THEME["text"]).pack(side="left", padx=8)
 
+        self.progress_bar = ctk.CTkProgressBar(card, fg_color=CURRENT_THEME["panel_alt"], progress_color=CURRENT_THEME["gold"], height=4)
+        self.progress_bar.grid(row=1, column=0, sticky="ew", padx=18, pady=(0, 5))
+        self.progress_bar.set(0)
+        self.progress_bar.grid_remove()
+
         self.summary_label = ctk.CTkLabel(card, text="Aún no se ha inspeccionado ninguna carpeta.", text_color=CURRENT_THEME["muted"])
-        self.summary_label.grid(row=1, column=0, sticky="w", padx=18)
+        self.summary_label.grid(row=2, column=0, sticky="w", padx=18)
 
         self.preview_tree = self.app.create_treeview(card, [
             ("serie", "Serie", 200),
             ("uuid", "UUID", 360),
         ])
-        self.preview_tree.grid(row=2, column=0, sticky="nsew", padx=12, pady=(8, 12))
+        self.preview_tree.grid(row=3, column=0, sticky="nsew", padx=12, pady=(8, 12))
 
     def select_dir(self):
         folder = filedialog.askdirectory(title="Selecciona carpeta de XMLs")
@@ -58,6 +63,8 @@ class XMLView(BaseView):
 
         self.app.log("Conciliando XMLs en segundo plano...")
         self.summary_label.configure(text="Cruzando datos Sheikah con el inventario...", text_color=CURRENT_THEME["warning"])
+        self.progress_bar.grid()
+        self.progress_bar.start()
 
         def _task():
             try:
@@ -69,6 +76,8 @@ class XMLView(BaseView):
         self.app.run_in_thread(_task)
 
     def _process_success(self, output_path, folder):
+        self.progress_bar.stop()
+        self.progress_bar.grid_remove()
         self.app.app_state.record_event("xml", "UUIDs conciliados", {"carpeta": folder, "inventario": output_path})
         self.app.refresh_data(force=True)
         self.app.history_view.refresh()
@@ -77,6 +86,8 @@ class XMLView(BaseView):
         messagebox.showinfo("XML conciliados", f"Inventario actualizado en base de datos.")
 
     def _process_error(self, exc):
+        self.progress_bar.stop()
+        self.progress_bar.grid_remove()
         import traceback
         self.summary_label.configure(text="Error conciliando XMLs.", text_color=CURRENT_THEME["danger"])
         self.app.log(f"Error procesando XML:\n{traceback.format_exc()}")

@@ -36,8 +36,13 @@ class ImportView(BaseView):
         ctk.CTkButton(top, text="Deshacer última carga", fg_color=CURRENT_THEME["danger"], hover_color=CURRENT_THEME["danger_hover"], command=self.undo_last_import).pack(side="left", padx=10)
         ctk.CTkLabel(top, textvariable=self.selected_pdf, text_color=CURRENT_THEME["text"]).pack(side="left", padx=8)
 
+        self.progress_bar = ctk.CTkProgressBar(card, fg_color=CURRENT_THEME["panel_alt"], progress_color=CURRENT_THEME["gold"], height=4)
+        self.progress_bar.grid(row=1, column=0, sticky="ew", padx=18, pady=(0, 5))
+        self.progress_bar.set(0)
+        self.progress_bar.grid_remove()
+
         self.summary_label = ctk.CTkLabel(card, text="Sin PDF seleccionado.", text_color=CURRENT_THEME["muted"])
-        self.summary_label.grid(row=1, column=0, sticky="w", padx=18)
+        self.summary_label.grid(row=2, column=0, sticky="w", padx=18)
 
         self.preview_tree = self.app.create_treeview(card, [
             ("incluir", "Incluir", 60),
@@ -47,7 +52,7 @@ class ImportView(BaseView):
             ("color", "Color", 100),
             ("serie", "Serie", 180),
         ])
-        self.preview_tree.grid(row=2, column=0, sticky="nsew", padx=12, pady=(8, 12))
+        self.preview_tree.grid(row=3, column=0, sticky="nsew", padx=12, pady=(8, 12))
         self.preview_tree.bind("<Double-1>", self.toggle_inclusion)
 
     def select_pdf(self):
@@ -247,6 +252,8 @@ class ImportView(BaseView):
 
         self.app.log("Iniciando importación en segundo plano...")
         self.summary_label.configure(text="Importando mercancía, por favor espera...", text_color=CURRENT_THEME["warning"])
+        self.progress_bar.grid()
+        self.progress_bar.start()
 
         def _task():
             try:
@@ -258,6 +265,8 @@ class ImportView(BaseView):
         self.app.run_in_thread(_task)
 
     def _import_success(self, output_path, selected_items, pdf_paths):
+        self.progress_bar.stop()
+        self.progress_bar.grid_remove()
         series_importadas = [str(item.get("No de SERIE:", "")) for item in selected_items]
         self.app.app_state.record_event(
             "carga",
@@ -272,6 +281,8 @@ class ImportView(BaseView):
         messagebox.showinfo("Carga completada", f"Se guardaron {len(selected_items)} piezas en base de datos.")
 
     def _import_error(self, exc):
+        self.progress_bar.stop()
+        self.progress_bar.grid_remove()
         import traceback
         self.summary_label.configure(text="Error durante la importación.", text_color=CURRENT_THEME["danger"])
         self.app.log(f"Error importando PDF:\n{traceback.format_exc()}")

@@ -189,6 +189,20 @@ class ZeldaApp(ctk.CTk):
         header.grid(row=0, column=0, sticky="ew", padx=10, pady=(8, 4))
         header.grid_columnconfigure(0, weight=1)
         ctk.CTkLabel(header, text="Sheikah Log", text_color=CURRENT_THEME["gold"], font=ctk.CTkFont(size=16, weight="bold")).grid(row=0, column=0, sticky="w", padx=4, pady=2)
+
+        self.global_search_var = tk.StringVar()
+        self.global_search_entry = ctk.CTkEntry(
+            header,
+            textvariable=self.global_search_var,
+            placeholder_text="Buscar serie rápida...",
+            width=180,
+            height=28
+        )
+        self.global_search_entry.grid(row=0, column=1, sticky="e", padx=(0, 10))
+        self.global_search_entry.bind("<Return>", self.perform_global_search)
+
+        ctk.CTkButton(header, text="Buscar", width=60, height=28, fg_color=CURRENT_THEME["forest"], hover_color=CURRENT_THEME["forest_hover"], command=self.perform_global_search).grid(row=0, column=2, sticky="e", padx=(0, 10))
+
         self.log_toggle_btn = ctk.CTkButton(
             header,
             text="◣",
@@ -198,7 +212,7 @@ class ZeldaApp(ctk.CTk):
             hover_color=CURRENT_THEME["forest_hover"],
             command=self.toggle_log_panel,
         )
-        self.log_toggle_btn.grid(row=0, column=1, sticky="e", padx=(6, 0))
+        self.log_toggle_btn.grid(row=0, column=3, sticky="e", padx=(6, 0))
 
         self.log_text = ctk.CTkTextbox(self.log_frame, height=150, fg_color="#101712", text_color=CURRENT_THEME["text"], border_width=1, border_color=CURRENT_THEME["gold"], font=("Consolas", 11))
         self.log_text.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 12))
@@ -211,8 +225,8 @@ class ZeldaApp(ctk.CTk):
             self.grid_rowconfigure(1, weight=0, minsize=44)
             self.log_toggle_btn.configure(text="◢")
         else:
-            self.log_text.grid()
             self.grid_rowconfigure(1, weight=0, minsize=0)
+            self.log_text.grid()
             self.log_toggle_btn.configure(text="◣")
 
     def create_treeview(self, parent, columns):
@@ -285,6 +299,58 @@ class ZeldaApp(ctk.CTk):
             btn.configure(fg_color=CURRENT_THEME["gold"] if active else CURRENT_THEME["panel_alt"], text_color="#241B0B" if active else CURRENT_THEME["text"])
         if hasattr(self.views[key], "refresh"):
             self.views[key].refresh()
+
+    def perform_global_search(self, event=None):
+        term = self.global_search_var.get().strip().lower()
+        if not term:
+            return
+
+        inventory = self.get_inventory_data(refresh=False)
+        if not inventory:
+            self.log("Búsqueda global: no hay datos cargados.")
+            return
+
+        found = []
+        for state_name, db_key in [("Disponible", "reporte"), ("Usado", "usados"), ("XML", "xml")]:
+            df = inventory.get(db_key)
+            if df is not None and not df.empty and "No de SERIE:" in df.columns:
+                match = df[df["No de SERIE:"].astype(str).str.lower().str.contains(term, na=False, regex=False)]
+                if not match.empty:
+                    for _, row in match.iterrows():
+                        found.append({
+                            "Estado": state_name,
+                            "Serie": str(row.get("No de SERIE:", "")),
+                            "Modelo": str(row.get("MODELO BASE", "")),
+                            "Sucursal": str(row.get("SUCURSAL", ""))
+                        })
+
+        if not found:
+            messagebox.showinfo("Búsqueda Global", f"No se encontró nada con '{term}'.")
+            self.log(f"Búsqueda global: '{term}' sin resultados.")
+            return
+
+        msg = f"Resultados para '{term}':\n\n"
+        for item in found:
+            msg += f"[{item['Estado']}] {item['Serie']} - {item['Modelo']} ({item['Sucursal']})\n"
+
+        if len(found) == 1:
+            msg += "\n¿Ir al Inventario y filtrar?"
+            if messagebox.askyesno("Búsqueda Global", msg):
+                self.show_view("inventario")
+                inv_view = self.views["inventario"]
+                inv_view.clear_filters()
+
+                state_to_tab = {"Disponible": "Disponibles", "Usado": "Usados", "XML": "XML"}
+                inv_view.tabview.set(state_to_tab[found[0]["Estado"]])
+
+                inv_view.search_entry.delete(0, "end")
+                inv_view.search_entry.insert(0, found[0]["Serie"])
+                inv_view.refresh()
+        else:
+            messagebox.showinfo("Búsqueda Global", msg)
+
+        self.global_search_var.set("")
+        self.log(f"Búsqueda global: {len(found)} resultados para '{term}'.")
 
     def open_output_folder(self):
         output_dir = Path(self.app_state.config.get("output_dir", config.OUTPUT_DIR))

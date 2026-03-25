@@ -162,7 +162,16 @@ class InventoryView(BaseView):
         df = pd.DataFrame(rows, columns=cols)
         out_path = filedialog.asksaveasfilename(defaultextension=".xlsx", filetypes=[("Excel", "*.xlsx")], title="Exportar Vista", initialfile=f"Vista_{current_tab}.xlsx")
         if out_path:
-            df.to_excel(out_path, index=False)
+            with pd.ExcelWriter(out_path, engine="openpyxl") as writer:
+                df.to_excel(writer, index=False, sheet_name=current_tab[:31])
+                worksheet = writer.sheets[current_tab[:31]]
+                for idx, col in enumerate(df.columns):
+                    max_len = len(str(col))
+                    if not df[col].empty:
+                        col_max = df[col].astype(str).map(len).max()
+                        if not pd.isna(col_max):
+                            max_len = max(max_len, col_max)
+                    worksheet.column_dimensions[chr(65 + idx)].width = max_len + 2
             self.app.log(f"Vista exportada: {out_path}")
             messagebox.showinfo("Exportado", f"Archivo creado:\n{out_path}")
 
@@ -178,36 +187,57 @@ class InventoryView(BaseView):
         }
         term = self.search_entry.get().strip().lower()
         self._update_active_filters_badge()
+
         sucursal_filter = set(self.sucursal_opt.get())
         modelo_filter = set(self.modelo_opt.get())
         all_sucs = set(self.sucursal_opt.values)
         all_mods = set(self.modelo_opt.values)
 
+        filter_sucs = sucursal_filter != all_sucs
+        filter_mods = modelo_filter != all_mods
+
         for name, (df, extra_col) in mapping.items():
             tree = self.trees[name]
             for item in tree.get_children():
                 tree.delete(item)
+
             if df is None or df.empty:
                 continue
-            for _, row in df.iterrows():
-                suc_val = str(row.get("SUCURSAL", ""))
-                mod_val = str(row.get("MODELO BASE", ""))
-                if sucursal_filter != all_sucs and suc_val not in sucursal_filter:
-                    continue
-                if modelo_filter != all_mods and mod_val not in modelo_filter:
-                    continue
-                serie = str(row.get("No de SERIE:", ""))
-                values = [
-                    suc_val,
-                    mod_val,
-                    format_color_for_display(row.get("COLOR", "")),
-                    serie,
-                    self.app.money(row.get("TOTAL", 0)),
-                    str(row.get(extra_col, "")) if extra_col and extra_col in df.columns else "",
-                ]
-                haystack = " ".join(values).lower()
-                if not term or term in haystack:
-                    tree.insert("", "end", values=values)
+
+            mask = pd.Series(True, index=df.index)
+
+            if filter_sucs and "SUCURSAL" in df.columns:
+                mask = mask & df["SUCURSAL"].astype(str).isin(sucursal_filter)
+
+            if filter_mods and "MODELO BASE" in df.columns:
+                mask = mask & df["MODELO BASE"].astype(str).isin(modelo_filter)
+
+            filtered_df = df[mask]
+
+            if term:
+                text_mask = pd.Series(False, index=filtered_df.index)
+                for col in ["SUCURSAL", "MODELO BASE", "COLOR", "No de SERIE:", "TOTAL"]:
+                    if col in filtered_df.columns:
+                        text_mask = text_mask | filtered_df[col].astype(str).str.lower().str.contains(term, na=False, regex=False)
+                if extra_col and extra_col in filtered_df.columns:
+                     text_mask = text_mask | filtered_df[extra_col].astype(str).str.lower().str.contains(term, na=False, regex=False)
+                filtered_df = filtered_df[text_mask]
+
+            # Vectorized creation of values
+            if not filtered_df.empty:
+                # Prepare columns safely
+                suc_col = filtered_df["SUCURSAL"].astype(str) if "SUCURSAL" in filtered_df.columns else pd.Series([""] * len(filtered_df), index=filtered_df.index)
+                mod_col = filtered_df["MODELO BASE"].astype(str) if "MODELO BASE" in filtered_df.columns else pd.Series([""] * len(filtered_df), index=filtered_df.index)
+                color_col = filtered_df["COLOR"].apply(lambda x: format_color_for_display(x)) if "COLOR" in filtered_df.columns else pd.Series([""] * len(filtered_df), index=filtered_df.index)
+                serie_col = filtered_df["No de SERIE:"].astype(str) if "No de SERIE:" in filtered_df.columns else pd.Series([""] * len(filtered_df), index=filtered_df.index)
+                total_col = filtered_df["TOTAL"].apply(lambda x: self.app.money(x)) if "TOTAL" in filtered_df.columns else pd.Series(["$0.00"] * len(filtered_df), index=filtered_df.index)
+                extra_c = filtered_df[extra_col].astype(str) if extra_col and extra_col in filtered_df.columns else pd.Series([""] * len(filtered_df), index=filtered_df.index)
+
+                # Combine into list of tuples for quick insertion
+                data_to_insert = zip(suc_col, mod_col, color_col, serie_col, total_col, extra_c)
+                for row_vals in data_to_insert:
+                     tree.insert("", "end", values=row_vals)
+
         self.refresh_totals()
 
     def refresh_totals(self):
