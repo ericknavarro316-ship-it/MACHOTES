@@ -64,10 +64,10 @@ class DashboardView(BaseView):
         self.compare_label = ctk.CTkLabel(self, text="Comparativo: sin periodo seleccionado.", text_color=CURRENT_THEME["muted"])
         self.compare_label.grid(row=2, column=0, sticky="e", padx=24, pady=(94, 0))
 
-        content = ctk.CTkFrame(self, fg_color="transparent")
+        content = ctk.CTkScrollableFrame(self, fg_color="transparent")
         content.grid(row=3, column=0, sticky="nsew", padx=18, pady=(12, 18))
         content.grid_columnconfigure((0, 1), weight=1)
-        content.grid_rowconfigure(0, weight=1)
+        content.grid_rowconfigure(0, weight=0)
 
         content.grid_columnconfigure(0, weight=1)
         content.grid_columnconfigure(1, weight=1)
@@ -96,12 +96,27 @@ class DashboardView(BaseView):
         self.bar_chart_container.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 12))
         self.bar_chart_canvas = None
 
-        # Lower summary row
-        summary_card = ctk.CTkFrame(content, fg_color=CURRENT_THEME["panel"], corner_radius=18, border_width=1, border_color=CURRENT_THEME["gold"])
-        summary_card.grid(row=1, column=0, columnspan=2, sticky="nsew", pady=(18, 0))
+        # Middle comparative row
+        mid_row = ctk.CTkFrame(content, fg_color="transparent")
+        mid_row.grid(row=1, column=0, columnspan=2, sticky="nsew", pady=(18, 0))
+        mid_row.grid_rowconfigure(0, weight=1)
+        mid_row.grid_columnconfigure(0, weight=1)
+        mid_row.grid_columnconfigure(1, weight=1)
+
+        state_chart_card = ctk.CTkFrame(mid_row, fg_color=CURRENT_THEME["panel"], corner_radius=18, border_width=1, border_color=CURRENT_THEME["gold"])
+        state_chart_card.grid(row=0, column=0, sticky="nsew", padx=(0, 9))
+        state_chart_card.grid_rowconfigure(1, weight=1)
+        state_chart_card.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(state_chart_card, text="Comparativa General de Estados", font=ctk.CTkFont(size=18, weight="bold"), text_color=CURRENT_THEME["gold"]).grid(row=0, column=0, sticky="w", padx=18, pady=(14, 6))
+        self.state_chart_container = ctk.CTkFrame(state_chart_card, fg_color="transparent")
+        self.state_chart_container.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 12))
+        self.state_chart_canvas = None
+
+        summary_card = ctk.CTkFrame(mid_row, fg_color=CURRENT_THEME["panel"], corner_radius=18, border_width=1, border_color=CURRENT_THEME["gold"])
+        summary_card.grid(row=0, column=1, sticky="nsew", padx=(9, 0))
         summary_card.grid_rowconfigure(1, weight=1)
         summary_card.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(summary_card, text="Resumen por Sucursal (Doble clic para ver inventario)", font=ctk.CTkFont(size=18, weight="bold"), text_color=CURRENT_THEME["gold"]).grid(row=0, column=0, sticky="w", padx=18, pady=(14, 6))
+        ctk.CTkLabel(summary_card, text="Resumen por Sucursal (Doble clic para ir a inventario)", font=ctk.CTkFont(size=18, weight="bold"), text_color=CURRENT_THEME["gold"]).grid(row=0, column=0, sticky="w", padx=18, pady=(14, 6))
         self.summary_tree = self.app.create_treeview(summary_card, [
             ("sucursal", "Sucursal", 160),
             ("cantidad", "Cantidad", 100),
@@ -173,6 +188,7 @@ class DashboardView(BaseView):
                 self.summary_tree.insert("", "end", values=(row["SUCURSAL"], str(row["CANTIDAD"]), f"{pct:.1f}%", f"${row['TOTAL']:,.2f}"))
 
         self.draw_chart(total_df)
+        self.draw_state_chart(rep_df, us_df, xml_df)
 
     def on_period_change(self, selected_period):
         now = pd.Timestamp.now().normalize()
@@ -518,3 +534,32 @@ class DashboardView(BaseView):
         self.bar_chart_canvas = FigureCanvasTkAgg(fig2, master=self.bar_chart_container)
         self.bar_chart_canvas.draw()
         self.bar_chart_canvas.get_tk_widget().pack(fill="both", expand=True)
+
+    def draw_state_chart(self, rep_df, us_df, xml_df):
+        if self.state_chart_canvas:
+            self.state_chart_canvas.get_tk_widget().destroy()
+
+        fig = Figure(figsize=(5.4, 4.2), dpi=100, facecolor=CURRENT_THEME["panel"])
+        ax = fig.add_subplot(111)
+        ax.set_facecolor(CURRENT_THEME["panel"])
+
+        counts = [
+            len(rep_df) if rep_df is not None else 0,
+            len(us_df) if us_df is not None else 0,
+            len(xml_df) if xml_df is not None else 0
+        ]
+
+        labels = ["Disponibles", "Usados (Machotes)", "XML (Facturados)"]
+        colors = [CURRENT_THEME["emerald"], CURRENT_THEME["warning"], CURRENT_THEME["sky"]]
+
+        if sum(counts) > 0:
+            ax.pie(counts, labels=labels, autopct="%1.1f%%", startangle=90, colors=colors, textprops={"color": CURRENT_THEME["text"], "fontsize": 10})
+            ax.set_title("Proporción por Estado", color=CURRENT_THEME["gold"], fontsize=12)
+        else:
+            ax.text(0.5, 0.5, "No hay datos para comparar", color=CURRENT_THEME["text"], ha="center", va="center")
+            ax.axis("off")
+
+        fig.tight_layout()
+        self.state_chart_canvas = FigureCanvasTkAgg(fig, master=self.state_chart_container)
+        self.state_chart_canvas.draw()
+        self.state_chart_canvas.get_tk_widget().pack(fill="both", expand=True)

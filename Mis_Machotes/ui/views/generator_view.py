@@ -13,17 +13,23 @@ class GeneratorView(BaseView):
         super().__init__(master, app)
         self.preview_df = pd.DataFrame()
         self.create_header()
+        self.grid_rowconfigure(1, weight=1)
 
-        top = ctk.CTkFrame(self, fg_color=CURRENT_THEME["panel"], corner_radius=18, border_width=1, border_color=CURRENT_THEME["gold"])
-        top.grid(row=1, column=0, sticky="ew", padx=18, pady=(0, 12))
-        for i in range(4):
-            top.grid_columnconfigure(i, weight=1)
+        main_split = ctk.CTkFrame(self, fg_color="transparent")
+        main_split.grid(row=1, column=0, sticky="nsew", padx=18, pady=(0, 18))
+        main_split.grid_rowconfigure(0, weight=1)
+        main_split.grid_columnconfigure(0, weight=1) # config panel
+        main_split.grid_columnconfigure(1, weight=2) # preview panel
 
-        self.amount_entry = self._entry(top, 0, 0, "Monto objetivo", "150000")
-        self.company_entry = self._entry(top, 0, 1, "Empresa", self.app.app_state.config.get("empresa_default", ""))
-        self.account_entry = self._entry(top, 0, 2, "Cuenta", self.app.app_state.config.get("cuenta_default", "MP"))
-        self.rfc_entry = self._entry(top, 0, 3, "RFC (opcional)", self.app.app_state.config.get("rfc_default", ""))
-        self.company_options = []
+        # --- LEFT PANEL (Config) ---
+        config_card = ctk.CTkScrollableFrame(main_split, fg_color=CURRENT_THEME["panel"], corner_radius=18, border_width=1, border_color=CURRENT_THEME["gold"])
+        config_card.grid(row=0, column=0, sticky="nsew", padx=(0, 9))
+
+        ctk.CTkLabel(config_card, text="Parámetros de Forja", font=ctk.CTkFont(size=18, weight="bold"), text_color=CURRENT_THEME["gold"]).pack(anchor="w", padx=14, pady=(14, 10))
+
+        self.amount_entry = self._entry(config_card, 1, 0, "Monto objetivo ($)", "150000", pack=True)
+        self.company_entry = self._entry(config_card, 2, 0, "Empresa", self.app.app_state.config.get("empresa_default", ""), pack=True)
+
         company_tools = ctk.CTkFrame(self.company_entry.master, fg_color="transparent")
         company_tools.pack(fill="x", pady=(6, 0))
         combo_values = ["Elegir empresa CSF...", "(Sin CSF detectados)"]
@@ -36,8 +42,8 @@ class GeneratorView(BaseView):
         self.company_combo.pack(side="left", fill="x", expand=True)
         ctk.CTkButton(
             company_tools,
-            text="Recargar",
-            width=90,
+            text="⟳",
+            width=30,
             fg_color=CURRENT_THEME["panel_alt"],
             hover_color=CURRENT_THEME["gold_hover"],
             command=self.refresh_company_options,
@@ -45,46 +51,73 @@ class GeneratorView(BaseView):
         self.company_combo.set("Elegir empresa CSF...")
         self.refresh_company_options()
 
-        filter_frame = ctk.CTkFrame(top, fg_color="transparent")
-        filter_frame.grid(row=1, column=0, columnspan=4, sticky="ew", padx=10, pady=10)
-        self.include_children = ctk.CTkSwitch(filter_frame, text="Incluir infantiles", progress_color=CURRENT_THEME["gold"], command=self._update_active_filters_badge)
-        self.include_children.pack(side="left", padx=12)
-        self.include_motor = ctk.CTkSwitch(filter_frame, text="Incluir motocicletas", progress_color=CURRENT_THEME["gold"], command=self._update_active_filters_badge)
-        self.include_motor.pack(side="left", padx=12)
+        self.account_entry = self._entry(config_card, 3, 0, "Cuenta", self.app.app_state.config.get("cuenta_default", "MP"), pack=True)
+        self.rfc_entry = self._entry(config_card, 4, 0, "RFC (opcional)", self.app.app_state.config.get("rfc_default", ""), pack=True)
 
-        ctk.CTkLabel(filter_frame, text="Sucursal:", text_color=CURRENT_THEME["muted"]).pack(side="left", padx=(20, 5))
-        self.sucursal_opt = MultiSelectMenu(filter_frame, title="Seleccionar", values=[], command=self.refresh, fg_color=CURRENT_THEME["panel_alt"], hover_color=CURRENT_THEME["panel"])
-        self.sucursal_opt.pack(side="left", padx=5)
+        ctk.CTkLabel(config_card, text="Filtros de Inventario", font=ctk.CTkFont(size=16, weight="bold"), text_color=CURRENT_THEME["gold"]).pack(anchor="w", padx=14, pady=(20, 10))
 
-        ctk.CTkLabel(filter_frame, text="Modelo:", text_color=CURRENT_THEME["muted"]).pack(side="left", padx=(20, 5))
-        self.modelo_opt = MultiSelectMenu(filter_frame, title="Seleccionar", values=[], command=self.refresh, fg_color=CURRENT_THEME["panel_alt"], hover_color=CURRENT_THEME["panel"])
-        self.modelo_opt.pack(side="left", padx=5)
-        ctk.CTkButton(filter_frame, text="X Filtros", width=90, fg_color=CURRENT_THEME["danger"], hover_color=CURRENT_THEME["danger_hover"], command=self.clear_filters).pack(side="left", padx=(10, 0))
-        self.active_filters_label = ctk.CTkLabel(filter_frame, text="Filtros activos: 0", text_color=CURRENT_THEME["muted"])
-        self.active_filters_label.pack(side="left", padx=(10, 0))
+        self.include_children = ctk.CTkSwitch(config_card, text="Incluir infantiles", progress_color=CURRENT_THEME["gold"], command=self._update_active_filters_badge)
+        self.include_children.pack(anchor="w", padx=18, pady=6)
+        self.include_motor = ctk.CTkSwitch(config_card, text="Incluir motocicletas", progress_color=CURRENT_THEME["gold"], command=self._update_active_filters_badge)
+        self.include_motor.pack(anchor="w", padx=18, pady=6)
 
-        controls = ctk.CTkFrame(top, fg_color="transparent")
-        controls.grid(row=2, column=0, columnspan=4, sticky="ew", padx=10, pady=(0, 12))
-        ctk.CTkButton(controls, text="Previsualizar combinación", fg_color=CURRENT_THEME["gold"], hover_color=CURRENT_THEME["gold_hover"], text_color="#221A0C", command=self.calculate_preview).pack(side="left", padx=(0, 10))
-        ctk.CTkButton(controls, text="Exportar machote", fg_color=CURRENT_THEME["forest"], hover_color=CURRENT_THEME["forest_hover"], command=self.export_machote).pack(side="left")
+        filters_row = ctk.CTkFrame(config_card, fg_color="transparent")
+        filters_row.pack(fill="x", padx=14, pady=10)
+        self.sucursal_opt = MultiSelectMenu(filters_row, title="Sucursal", values=[], command=self.refresh, fg_color=CURRENT_THEME["panel_alt"], hover_color=CURRENT_THEME["panel"])
+        self.sucursal_opt.pack(fill="x", pady=(0, 6))
+        self.modelo_opt = MultiSelectMenu(filters_row, title="Modelo", values=[], command=self.refresh, fg_color=CURRENT_THEME["panel_alt"], hover_color=CURRENT_THEME["panel"])
+        self.modelo_opt.pack(fill="x")
 
-        ctk.CTkButton(controls, text="Importar Machote Externo", fg_color=CURRENT_THEME["sky"], hover_color="#4F7C7A", command=self.import_external_machote).pack(side="right", padx=(10, 0))
+        self.active_filters_label = ctk.CTkLabel(config_card, text="Filtros activos: 0", text_color=CURRENT_THEME["muted"])
+        self.active_filters_label.pack(anchor="w", padx=18)
+        ctk.CTkButton(config_card, text="Limpiar Filtros", fg_color=CURRENT_THEME["danger"], hover_color=CURRENT_THEME["danger_hover"], command=self.clear_filters).pack(fill="x", padx=14, pady=(5, 20))
 
-        preview_card = ctk.CTkFrame(self, fg_color=CURRENT_THEME["panel"], corner_radius=18, border_width=1, border_color=CURRENT_THEME["gold"])
-        preview_card.grid(row=2, column=0, sticky="nsew", padx=18, pady=(0, 18))
-        preview_card.grid_rowconfigure(1, weight=1)
+        ctk.CTkButton(config_card, text="Importar Machote Externo", fg_color=CURRENT_THEME["sky"], hover_color="#4F7C7A", command=self.import_external_machote).pack(fill="x", padx=14, pady=(10, 10))
+
+        # --- RIGHT PANEL (Preview & Summary) ---
+        preview_card = ctk.CTkFrame(main_split, fg_color=CURRENT_THEME["panel"], corner_radius=18, border_width=1, border_color=CURRENT_THEME["gold"])
+        preview_card.grid(row=0, column=1, sticky="nsew", padx=(9, 0))
+        preview_card.grid_rowconfigure(2, weight=1)
         preview_card.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(2, weight=1)
 
-        self.preview_label = ctk.CTkLabel(preview_card, text="Aún no se ha invocado una combinación.", text_color=CURRENT_THEME["text"], font=ctk.CTkFont(size=16, weight="bold"))
-        self.preview_label.grid(row=0, column=0, sticky="w", padx=18, pady=(14, 8))
-        self.preview_tree = self.app.create_treeview(preview_card, [
+        header_frame = ctk.CTkFrame(preview_card, fg_color="transparent")
+        header_frame.grid(row=0, column=0, sticky="ew", padx=18, pady=(14, 0))
+        header_frame.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(header_frame, text="Resumen de Combinación", font=ctk.CTkFont(size=18, weight="bold"), text_color=CURRENT_THEME["gold"]).grid(row=0, column=0, sticky="w")
+        ctk.CTkButton(header_frame, text="Previsualizar ⟳", width=140, fg_color=CURRENT_THEME["gold"], hover_color=CURRENT_THEME["gold_hover"], text_color="#221A0C", command=self.calculate_preview).grid(row=0, column=1, sticky="e", padx=(0, 10))
+        ctk.CTkButton(header_frame, text="Exportar a Excel", width=140, fg_color=CURRENT_THEME["forest"], hover_color=CURRENT_THEME["forest_hover"], command=self.export_machote).grid(row=0, column=2, sticky="e")
+
+        self.summary_frame = ctk.CTkFrame(preview_card, fg_color=CURRENT_THEME["panel_alt"], corner_radius=12)
+        self.summary_frame.grid(row=1, column=0, sticky="ew", padx=18, pady=(14, 10))
+        self.summary_frame.grid_columnconfigure((0,1,2), weight=1)
+
+        self.lbl_target = ctk.CTkLabel(self.summary_frame, text="Objetivo: $0.00", font=ctk.CTkFont(size=14, weight="bold"))
+        self.lbl_target.grid(row=0, column=0, pady=8)
+        self.lbl_actual = ctk.CTkLabel(self.summary_frame, text="Logrado: $0.00", font=ctk.CTkFont(size=14, weight="bold"), text_color=CURRENT_THEME["emerald"])
+        self.lbl_actual.grid(row=0, column=1, pady=8)
+        self.lbl_diff = ctk.CTkLabel(self.summary_frame, text="Diferencia: $0.00", font=ctk.CTkFont(size=14))
+        self.lbl_diff.grid(row=0, column=2, pady=8)
+
+        self.progress_bar = ctk.CTkProgressBar(self.summary_frame, fg_color=CURRENT_THEME["panel"], progress_color=CURRENT_THEME["gold"], height=8)
+        self.progress_bar.grid(row=1, column=0, columnspan=3, sticky="ew", padx=14, pady=(0, 12))
+        self.progress_bar.set(0)
+
+        self.preview_label = ctk.CTkLabel(preview_card, text="Define tu monto objetivo y presiona 'Previsualizar'.", text_color=CURRENT_THEME["muted"])
+        self.preview_label.grid(row=2, column=0) # Centered placeholder
+
+        self.preview_tree_container = ctk.CTkFrame(preview_card, fg_color="transparent")
+        self.preview_tree_container.grid(row=2, column=0, sticky="nsew", padx=12, pady=(0, 12))
+        self.preview_tree_container.grid_rowconfigure(0, weight=1)
+        self.preview_tree_container.grid_columnconfigure(0, weight=1)
+
+        self.preview_tree = self.app.create_treeview(self.preview_tree_container, [
             ("sucursal", "Sucursal", 110),
             ("modelo", "Modelo", 150),
             ("serie", "Serie", 180),
             ("total", "Total", 120),
         ])
-        self.preview_tree.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 12))
+        self.preview_tree.grid(row=0, column=0, sticky="nsew")
+        self.preview_tree_container.grid_remove() # Hide initially
 
     def refresh(self):
         inventory = self.app.get_inventory_data(refresh=False)
@@ -147,9 +180,12 @@ class GeneratorView(BaseView):
         color = CURRENT_THEME["gold"] if active > 0 else CURRENT_THEME["muted"]
         self.active_filters_label.configure(text=f"Filtros activos: {active}", text_color=color)
 
-    def _entry(self, parent, row, column, label, value=""):
+    def _entry(self, parent, row, column, label, value="", pack=False):
         frame = ctk.CTkFrame(parent, fg_color="transparent")
-        frame.grid(row=row, column=column, sticky="ew", padx=10, pady=(12, 0))
+        if pack:
+            frame.pack(fill="x", padx=14, pady=(10, 0))
+        else:
+            frame.grid(row=row, column=column, sticky="ew", padx=10, pady=(12, 0))
         ctk.CTkLabel(frame, text=label, text_color=CURRENT_THEME["muted"]).pack(anchor="w")
         entry = ctk.CTkEntry(frame)
         entry.pack(fill="x", pady=(4, 0))
@@ -208,6 +244,8 @@ class GeneratorView(BaseView):
         inc_children = self.include_children.get() == 1
         inc_motor = self.include_motor.get() == 1
 
+        self.lbl_target.configure(text=f"Objetivo: {self.app.money(target)}")
+
         def _task():
             try:
                 df_available = mg.procesar_inventario(
@@ -232,8 +270,20 @@ class GeneratorView(BaseView):
             self.preview_tree.delete(item)
 
         total = pd.to_numeric(preview.get("TOTAL", pd.Series(dtype=float)), errors="coerce").fillna(0).sum() if not preview.empty else 0
-        diff = abs(total - target)
-        self.preview_label.configure(text=f"Resultado: {len(preview)} piezas · {self.app.money(total)} · diferencia {self.app.money(diff)}", text_color=CURRENT_THEME["text"])
+        diff = total - target
+
+        self.lbl_actual.configure(text=f"Logrado: {self.app.money(total)}")
+
+        if diff >= 0:
+            self.lbl_diff.configure(text=f"Sobrante: {self.app.money(diff)}", text_color=CURRENT_THEME["emerald"])
+        else:
+            self.lbl_diff.configure(text=f"Faltante: {self.app.money(abs(diff))}", text_color=CURRENT_THEME["warning"])
+
+        progress = min((total / target) if target > 0 else 0, 1.0)
+        self.progress_bar.set(progress)
+
+        self.preview_label.grid_remove()
+        self.preview_tree_container.grid()
 
         for _, row in preview.iterrows():
             self.preview_tree.insert("", "end", values=(
