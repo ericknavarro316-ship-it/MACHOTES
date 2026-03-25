@@ -44,7 +44,50 @@ class SettingsView(BaseView):
         self.mode_option.pack(anchor="w", pady=(6, 0))
         self.mode_option.set(self.app.app_state.config.get("theme_mode", "Dark"))
 
-        ctk.CTkButton(card, text="Guardar ajustes", fg_color=CURRENT_THEME["forest"], hover_color=CURRENT_THEME["forest_hover"], command=self.save).grid(row=len(fields) + 1, column=0, sticky="w", padx=8, pady=(8, 16))
+        buttons_frame = ctk.CTkFrame(card, fg_color="transparent")
+        buttons_frame.grid(row=len(fields) + 1, column=0, sticky="ew", padx=8, pady=(8, 16))
+
+        ctk.CTkButton(buttons_frame, text="Guardar ajustes", fg_color=CURRENT_THEME["forest"], hover_color=CURRENT_THEME["forest_hover"], command=self.save).pack(side="left", padx=(0, 20))
+
+        self.btn_wipe = ctk.CTkButton(buttons_frame, text="Destruir Reino (Resetear BD)", fg_color=CURRENT_THEME["danger"], hover_color=CURRENT_THEME["danger_hover"], command=self.wipe_database)
+        self.btn_wipe.pack(side="right")
+
+    def wipe_database(self):
+        confirm1 = messagebox.askyesno(
+            "⚠️ ADVERTENCIA CRÍTICA ⚠️",
+            "Estás a punto de borrar ABSOLUTAMENTE TODOS los artículos de la base de datos (Disponibles, Usados y XML).\n\n"
+            "Esto te dejará con un inventario vacío, como si la app estuviera recién instalada.\n\n"
+            "¿Estás seguro de que quieres continuar?"
+        )
+        if not confirm1:
+            return
+
+        confirm2 = messagebox.askyesno(
+            "Última Confirmación",
+            "Esta acción NO se puede deshacer (a menos que restaures un respaldo manualmente).\n\n¿Destruir el reino y empezar de cero?"
+        )
+        if not confirm2:
+            return
+
+        self.app.log("Iniciando destrucción de la base de datos...")
+
+        try:
+            from database import db_manager
+            db_manager.create_empty_inventory()
+
+            # Limpiar historial tambien para evitar confusiones
+            self.app.app_state.history = []
+            self.app.app_state.save_history()
+
+            self.app.refresh_data(force=True)
+            self.app.log("El Reino ha renacido. Base de datos reseteada con éxito.")
+            messagebox.showinfo("Reinicio Exitoso", "El inventario ha sido borrado por completo.\nPuedes empezar a cargar PDFs desde cero.")
+
+            # Refrescar la vista actual si es necesario (el Dashboard ya se refresca con refresh_data)
+        except Exception as e:
+            import traceback
+            self.app.log(f"Error reseteando BD:\n{traceback.format_exc()}")
+            messagebox.showerror("Error", f"No se pudo resetear la base de datos:\n\n{e}")
 
     def change_mode(self, mode):
         if mode in ["Dark", "Light", "System"]:
