@@ -161,8 +161,10 @@ def procesar_inventario(df_reporte, df_precios, incluir_infantiles=False, inclui
     df['MODELO_MAPPED'] = df['MODELO BASE'].apply(aplicar_mapeo)
     df_precios_dict = df_precios.drop_duplicates(subset=['MODELO'], keep='last').set_index('MODELO').to_dict('index')
     
-    for idx, row in df.iterrows():
-        modelo_busqueda = row['MODELO_MAPPED']
+    col_idx = {col: i + 1 for i, col in enumerate(df.columns)}
+    for row in df.itertuples(name=None):
+        idx = row[0]
+        modelo_busqueda = row[col_idx['MODELO_MAPPED']]
         if modelo_busqueda in df_precios_dict:
             datos_precio = df_precios_dict[modelo_busqueda]
             try:
@@ -174,8 +176,9 @@ def procesar_inventario(df_reporte, df_precios, incluir_infantiles=False, inclui
             df.at[idx, 'CLAVE SAT'] = str(datos_precio['CLAVE SAT'])
             
             desc_base = str(datos_precio['DESCRIPCION']).strip()
-            color = str(row['COLOR']).strip() if pd.notna(row['COLOR']) else ""
-            serie = str(row['No de SERIE:']).strip()
+            color_val = row[col_idx['COLOR']] if 'COLOR' in col_idx else ''
+            color = str(color_val).strip() if pd.notna(color_val) else ""
+            serie = str(row[col_idx['No de SERIE:']]).strip()
             if color.lower() != 'nan' and color != "":
                 desc_final = f"{desc_base} {modelo_busqueda} {color} NO DE SERIE:{serie}"
             else:
@@ -422,13 +425,19 @@ def extraer_nuevos_articulos_excel(ruta_excel, with_report=False):
 
         df = df.dropna(subset=['No de SERIE:'])
 
-        for idx, row in df.iterrows():
-            serie = str(row.get('No de SERIE:', '')).strip()
+        col_idx = {col: i for i, col in enumerate(df.columns)}
+        for row in df.itertuples(index=False, name=None):
+            serie_val = row[col_idx['No de SERIE:']] if 'No de SERIE:' in col_idx else ''
+            serie = str(serie_val).strip()
             if len(serie) > 5 and serie.isalnum() and serie != "nan":
+                sucursal_val = row[col_idx['SUCURSAL']] if 'SUCURSAL' in col_idx else 'ALMACEN'
+                modelo_base_val = row[col_idx['MODELO BASE']] if 'MODELO BASE' in col_idx else (row[col_idx['MODELO']] if 'MODELO' in col_idx else 'SIN MODELO')
+                color_val = row[col_idx['COLOR']] if 'COLOR' in col_idx else ''
+
                 articulo = {
-                    'SUCURSAL': str(row.get('SUCURSAL', 'ALMACEN')).strip(),
-                    'MODELO BASE': str(row.get('MODELO BASE', row.get('MODELO', 'SIN MODELO'))).strip(),
-                    'COLOR': str(row.get('COLOR', '')).strip().upper(),
+                    'SUCURSAL': str(sucursal_val).strip(),
+                    'MODELO BASE': str(modelo_base_val).strip(),
+                    'COLOR': str(color_val).strip().upper(),
                     'No de SERIE:': serie,
                     'CANTIDAD': 1
                 }
@@ -703,10 +712,11 @@ def importar_machote_externo(ruta_machote):
     series_encontradas = []
 
     # Buscar posibles columnas de serie
-    for idx, row in df_externo.iterrows():
+    col_idx = {col: i for i, col in enumerate(df_externo.columns)}
+    for row in df_externo.itertuples(index=False, name=None):
         # Vamos a buscar en todas las celdas el formato de serie
         for col in df_externo.columns:
-            val = str(row[col]).strip()
+            val = str(row[col_idx[col]]).strip()
             # Asumimos que una serie es algo como XXXXXX y típicamente alfanumérico
 
             # Buscar explícitamente "NO DE SERIE:"
