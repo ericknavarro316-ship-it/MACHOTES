@@ -5,3 +5,4 @@ pdfplumber
 pymupdf
 openpyxl
 plyer
+defusedxml
