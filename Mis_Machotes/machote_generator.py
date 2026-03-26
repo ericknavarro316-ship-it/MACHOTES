@@ -167,7 +167,7 @@ def procesar_inventario(df_reporte, df_precios, incluir_infantiles=False, inclui
             datos_precio = df_precios_dict[modelo_busqueda]
             try:
                 d1_val = float(datos_precio['D1'])
-            except:
+            except (ValueError, TypeError):
                 d1_val = None
             if pd.notna(d1_val):
                 df.at[idx, 'D1'] = d1_val
@@ -584,7 +584,7 @@ def cargar_inventario(ruta_pdf, path_inventario, lista_articulos=None):
             datos_precio = df_precios_dict[modelo_busqueda]
             try:
                 d1_val = float(datos_precio['D1'])
-            except:
+            except (ValueError, TypeError):
                 d1_val = None
             clave_sat = str(datos_precio['CLAVE SAT'])
             desc_base = str(datos_precio['DESCRIPCION']).strip()
