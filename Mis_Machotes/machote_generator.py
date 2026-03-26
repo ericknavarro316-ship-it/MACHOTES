@@ -14,7 +14,7 @@ from datetime import datetime
 
 import random
 import shutil
-import xml.etree.ElementTree as ET
+import defusedxml.ElementTree as ET
 import core.config as config
 from database import db_manager
 
