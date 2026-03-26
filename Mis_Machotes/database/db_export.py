@@ -29,6 +29,7 @@ def export_inventory_to_excel(output_path):
             if sheet_name == 'USADOS':
                 cols.append("MACHOTE")
             if sheet_name == 'XML_ENCONTRADOS':
+                cols.append("MACHOTE")
                 cols.append("UUID")
 
             # Keep only columns that exist

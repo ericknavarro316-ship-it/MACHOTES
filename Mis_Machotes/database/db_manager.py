@@ -330,3 +330,44 @@ def mark_items_as_xml(series_uuid_dict):
         conn.close()
 
     return updated_total
+
+
+def undo_xml_import(series_list):
+    """Reverts items from XML back to USADO (if they have a machote) or DISPONIBLE (otherwise) and clears the uuid"""
+    if not series_list:
+        return 0
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    updated = 0
+    try:
+        placeholders = ','.join('?' * len(series_list))
+
+        # Primero restauramos los que tienen un machote asignado a USADO
+        query_usado = f'''
+        UPDATE inventario
+        SET estado = 'USADO', uuid = NULL
+        WHERE no_serie IN ({placeholders}) AND estado = 'XML' AND machote IS NOT NULL
+        '''
+        cursor.execute(query_usado, series_list)
+        updated += cursor.rowcount
+
+        # Luego restauramos los que no tienen machote a DISPONIBLE
+        query_disponible = f'''
+        UPDATE inventario
+        SET estado = 'DISPONIBLE', uuid = NULL
+        WHERE no_serie IN ({placeholders}) AND estado = 'XML' AND machote IS NULL
+        '''
+        cursor.execute(query_disponible, series_list)
+        updated += cursor.rowcount
+
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        print(f"Error revirtiendo XMLs: {e}")
+        raise
+    finally:
+        conn.close()
+
+    return updated

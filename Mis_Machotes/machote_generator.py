@@ -691,12 +691,12 @@ def actualizar_inventario_uuid(xml_dir, path_inventario):
     series_a_buscar = procesar_xmls(xml_dir)
     if not series_a_buscar:
         print("No hay UUIDs/series para actualizar.")
-        return
+        return [], path_inventario
         
     print("Actualizando SQLite Inventario con UUIDs...")
     db_manager.mark_items_as_xml(series_a_buscar)
     print("Inventario SQLite actualizado con UUIDs.")
-    return path_inventario
+    return list(series_a_buscar.keys()), path_inventario
 
 def actualizar_inventario_base(df_seleccion, nombre_machote):
     print("Actualizando SQLite Inventario...")
@@ -869,5 +869,5 @@ def cargar_inventario_y_reemplazar(ruta_pdf, path_inventario=config.PATH_INVENTA
 
 
 def validar_xml_y_reemplazar(xml_dir, path_inventario=config.PATH_INVENTARIO):
-    actualizar_inventario_uuid(xml_dir, path_inventario)
-    return path_inventario
+    series_actualizadas, _ = actualizar_inventario_uuid(xml_dir, path_inventario)
+    return path_inventario, series_actualizadas
