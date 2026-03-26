@@ -464,6 +464,7 @@ def extraer_nuevos_articulos(ruta_pdf, with_report=False):
     sucursal = match.group(1).strip() if match else "ALMACEN"
     
     articulos_encontrados = []
+    seen_series = set()
     warnings = []
     bloques_detectados = 0
     
@@ -511,8 +512,9 @@ def extraer_nuevos_articulos(ruta_pdf, with_report=False):
             series = [s.strip() for s in series_str.split(',')]
             
             for s in series:
-                if len(s) > 5:
+                if len(s) > 5 and s not in seen_series:
                     articulos_encontrados.append({'SUCURSAL': sucursal, 'MODELO BASE': modelo_actual, 'COLOR': color_actual, 'No de SERIE:': s, 'CANTIDAD': 1})
+                    seen_series.add(s)
             
             j = i + 1
             while j < len(lineas):
@@ -520,8 +522,9 @@ def extraer_nuevos_articulos(ruta_pdf, with_report=False):
                 match_series_extra = re.findall(r"([A-Z0-9]{10,25})(?:,|$)", lin_j)
                 if match_series_extra:
                     for s in match_series_extra:
-                        if len(s) > 5 and s not in [a['No de SERIE:'] for a in articulos_encontrados]:
+                        if len(s) > 5 and s not in seen_series:
                             articulos_encontrados.append({'SUCURSAL': sucursal, 'MODELO BASE': modelo_actual, 'COLOR': color_actual, 'No de SERIE:': s, 'CANTIDAD': 1})
+                            seen_series.add(s)
                 if "$" in lin_j or re.match(r"^(.+?)\s+(\d+)\s+\(\d+\)", lin_j):
                     break
                 j += 1
