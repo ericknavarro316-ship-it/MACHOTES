@@ -56,6 +56,7 @@ class ImportView(BaseView):
         ])
         self.preview_tree.grid(row=3, column=0, sticky="nsew", padx=12, pady=(8, 12))
         self.preview_tree.bind("<Double-1>", self.toggle_inclusion)
+        self.preview_tree.bind("<space>", self.toggle_inclusion_keyboard)
 
     def select_pdf(self):
         pdf_paths = filedialog.askopenfilenames(title="Seleccionar PDF(s) de mercancía", filetypes=[("PDF", "*.pdf")])
@@ -100,7 +101,7 @@ class ImportView(BaseView):
             self.preview_tree.delete(item)
         for idx, item in enumerate(self.items_loaded):
             color_display = self._format_color_for_display(item.get("COLOR", ""))
-            self.preview_tree.insert("", "end", values=("[X]", item.get("_source_pdf", ""), item.get("SUCURSAL", ""), item.get("MODELO BASE", ""), color_display, item.get("No de SERIE:", "")), tags=(str(idx),))
+            self.preview_tree.insert("", "end", values=("☑", item.get("_source_pdf", ""), item.get("SUCURSAL", ""), item.get("MODELO BASE", ""), color_display, item.get("No de SERIE:", "")), tags=(str(idx),))
         inv = self.app.get_inventory_data(refresh=False) or {}
         existentes = set()
         for key in ("reporte", "usados", "xml"):
@@ -136,7 +137,7 @@ class ImportView(BaseView):
 
         for idx, item in enumerate(self.items_loaded):
             color_display = self._format_color_for_display(item.get("COLOR", ""))
-            self.preview_tree.insert("", "end", values=("[X]", item.get("_source_pdf", ""), item.get("SUCURSAL", ""), item.get("MODELO BASE", ""), color_display, item.get("No de SERIE:", "")), tags=(str(idx),))
+            self.preview_tree.insert("", "end", values=("☑", item.get("_source_pdf", ""), item.get("SUCURSAL", ""), item.get("MODELO BASE", ""), color_display, item.get("No de SERIE:", "")), tags=(str(idx),))
 
         inv = self.app.get_inventory_data(refresh=False) or {}
         existentes = set()
@@ -218,7 +219,7 @@ class ImportView(BaseView):
         selected_items = []
         for item_id in self.preview_tree.get_children():
             values = self.preview_tree.item(item_id, "values")
-            if values[0] == "[X]":
+            if values[0] in ("[X]", "☑"):
                 idx = int(self.preview_tree.item(item_id, "tags")[0])
                 selected_items.append(self.items_loaded[idx])
         return selected_items
@@ -262,11 +263,23 @@ class ImportView(BaseView):
         if not item_id:
             return
         values = list(self.preview_tree.item(item_id, "values"))
-        if values[0] == "[X]":
-            values[0] = "[ ]"
+        if values[0] in ("[X]", "☑"):
+            values[0] = "☐"
         else:
-            values[0] = "[X]"
+            values[0] = "☑"
         self.preview_tree.item(item_id, values=values)
+
+    def toggle_inclusion_keyboard(self, event):
+        selected = self.preview_tree.selection()
+        if not selected:
+            return
+        for item_id in selected:
+            values = list(self.preview_tree.item(item_id, "values"))
+            if values[0] in ("[X]", "☑"):
+                values[0] = "☐"
+            else:
+                values[0] = "☑"
+            self.preview_tree.item(item_id, values=values)
 
     def import_pdf(self):
         if not self.selected_pdfs:
