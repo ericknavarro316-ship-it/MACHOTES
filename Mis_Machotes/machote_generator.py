@@ -334,15 +334,16 @@ def generar_machote(df_seleccion, monto_objetivo, empresa, rfc, cuenta_mp):
         for c in range(1, ws.max_column + 1):
             ws.cell(row=r, column=c).value = None
             
-    for idx, row in df_seleccion.iterrows():
-        ws.cell(row=fila_inicio, column=2).value = row['CANTIDAD']
+    col_idx = {col: i for i, col in enumerate(df_seleccion.columns)}
+    for row in df_seleccion.itertuples(index=False, name=None):
+        ws.cell(row=fila_inicio, column=2).value = row[col_idx['CANTIDAD']]
         ws.cell(row=fila_inicio, column=3).value = "PIEZA"
-        ws.cell(row=fila_inicio, column=4).value = row['CLAVE SAT']
-        ws.cell(row=fila_inicio, column=5).value = row['DESCRIPCION']
-        ws.cell(row=fila_inicio, column=6).value = row['P. UNITARIO']
-        ws.cell(row=fila_inicio, column=7).value = row['SUBTOTAL']
-        ws.cell(row=fila_inicio, column=8).value = row['IVA']
-        ws.cell(row=fila_inicio, column=9).value = row['TOTAL']
+        ws.cell(row=fila_inicio, column=4).value = row[col_idx['CLAVE SAT']]
+        ws.cell(row=fila_inicio, column=5).value = row[col_idx['DESCRIPCION']]
+        ws.cell(row=fila_inicio, column=6).value = row[col_idx['P. UNITARIO']]
+        ws.cell(row=fila_inicio, column=7).value = row[col_idx['SUBTOTAL']]
+        ws.cell(row=fila_inicio, column=8).value = row[col_idx['IVA']]
+        ws.cell(row=fila_inicio, column=9).value = row[col_idx['TOTAL']]
         
         for col in range(2, 11):
             cell = ws.cell(row=fila_inicio, column=col)
