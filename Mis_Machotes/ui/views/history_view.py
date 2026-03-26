@@ -94,7 +94,7 @@ class HistoryView(BaseView):
             try:
                 formatted = json.dumps(details, indent=4, ensure_ascii=False)
                 text.insert("0.0", formatted)
-            except:
+            except (TypeError, ValueError):
                 text.insert("0.0", str(details))
 
             text.configure(state="disabled")
