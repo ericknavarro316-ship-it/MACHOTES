@@ -12,6 +12,9 @@ import argparse
 import unicodedata
 from datetime import datetime
 
+import random
+import shutil
+import xml.etree.ElementTree as ET
 import core.config as config
 from database import db_manager
 
@@ -209,14 +212,12 @@ def procesar_inventario(df_reporte, df_precios, incluir_infantiles=False, inclui
     return df
 
 def seleccionar_articulos(df_disponibles, monto_objetivo):
-    import random
     
     mejor_diferencia = float('inf')
     mejor_combinacion = []
     
     items = df_disponibles.to_dict('records')
     if not items:
-        import pandas as pd
         return pd.DataFrame()
 
     # 1. Greedy Aleatorizado con Refinamiento (Local Search)
@@ -282,7 +283,6 @@ def seleccionar_articulos(df_disponibles, monto_objetivo):
             
     # Finalmente, para mantener consistencia en la visualización,
     # ordenamos la combinacion ganadora antes de devolverla
-    import pandas as pd
     df_resultado = pd.DataFrame(mejor_combinacion)
     if not df_resultado.empty:
         df_resultado = df_resultado.sort_values(by=['SUCURSAL', 'MODELO BASE', 'No de SERIE:'])
@@ -386,8 +386,6 @@ def _guardar_warnings_pdf(ruta_pdf, warnings):
 
 
 def extraer_nuevos_articulos_excel(ruta_excel, with_report=False):
-    import pandas as pd
-    import os
 
     articulos_encontrados = []
     warnings = []
@@ -456,9 +454,6 @@ def extraer_nuevos_articulos_excel(ruta_excel, with_report=False):
 
 
 def extraer_nuevos_articulos(ruta_pdf, with_report=False):
-    import pdfplumber
-    import re
-    import os
     
     match = re.search(r"reporte-productos (.+)\.pdf", os.path.basename(ruta_pdf), re.IGNORECASE)
     sucursal = match.group(1).strip() if match else "ALMACEN"
@@ -543,10 +538,6 @@ def extraer_nuevos_articulos(ruta_pdf, with_report=False):
 
 
 def cargar_inventario(ruta_pdf, path_inventario, lista_articulos=None):
-    import openpyxl
-    from openpyxl.styles import Font
-    from copy import copy
-    import pandas as pd
     
     print(f"Leyendo PDF de carga: {ruta_pdf}")
     if lista_articulos is not None:
@@ -635,8 +626,6 @@ def cargar_inventario(ruta_pdf, path_inventario, lista_articulos=None):
     print(f"Nuevos artículos insertados en base de datos. (Inventario Excel se actualizará bajo demanda).")
 
 def procesar_xmls(xml_dir):
-    import glob
-    import xml.etree.ElementTree as ET
     
     archivos_xml = glob.glob(os.path.join(xml_dir, "*.xml"))
     if not archivos_xml:
@@ -706,9 +695,6 @@ def actualizar_inventario_base(df_seleccion, nombre_machote):
     return config.PATH_INVENTARIO
 
 def importar_machote_externo(ruta_machote):
-    import pandas as pd
-    from datetime import datetime
-    import os
 
     print(f"Importando machote externo desde: {ruta_machote}")
     df_externo = pd.read_excel(ruta_machote, header=None)
@@ -721,7 +707,6 @@ def importar_machote_externo(ruta_machote):
         for col in df_externo.columns:
             val = str(row[col]).strip()
             # Asumimos que una serie es algo como XXXXXX y típicamente alfanumérico
-            import re
 
             # Buscar explícitamente "NO DE SERIE:"
             match = re.search(r"NO DE SERIE:\s*([A-Z0-9]+)", val, re.IGNORECASE)
@@ -780,7 +765,6 @@ def _replace_inventory_file(nuevo_path, path_inventario=config.PATH_INVENTARIO):
 
 
 def deshacer_machote(nombre_machote):
-    import pandas as pd
 
     print(f"Deshaciendo machote en SQLite: {nombre_machote}")
 
