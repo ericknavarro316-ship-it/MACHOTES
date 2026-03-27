@@ -252,7 +252,7 @@ class ZeldaApp(ctk.CTk):
             if math.isnan(val):
                 return "$0.00"
             return f"${val:,.2f}"
-        except Exception:
+        except (ValueError, TypeError):
             return "$0.00"
 
     def log(self, message):

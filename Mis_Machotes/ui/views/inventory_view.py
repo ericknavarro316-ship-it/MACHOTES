@@ -264,6 +264,6 @@ class InventoryView(BaseView):
                 val = float(str(val_str).replace("$", "").replace(",", ""))
                 if not math.isnan(val):
                     total_val += val
-            except Exception:
+            except (ValueError, TypeError):
                 pass
         self.lbl_totals.configure(text=f"{count} piezas visibles · Total: ${total_val:,.2f}")
