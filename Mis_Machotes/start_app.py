@@ -29,7 +29,8 @@ REQUIRED_MODULES = {
     "openpyxl": "openpyxl",
     "plyer": "plyer",
     "defusedxml": "defusedxml",
-    "reportlab": "reportlab"
+    "reportlab": "reportlab",
+    "PIL": "Pillow"
 }
 REQUIRED_FILES = [
     BASE_DIR / "dashboard_app.py",
