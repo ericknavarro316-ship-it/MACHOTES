@@ -18,7 +18,6 @@ class SettingsView(BaseView):
             ("empresa_default", "Empresa por defecto"),
             ("cuenta_default", "Cuenta por defecto"),
             ("rfc_default", "RFC por defecto"),
-            ("logo_text", "Texto principal"),
             ("parse_warning_threshold", "Umbral warnings (importación PDF)"),
             ("inventario_path", "Ruta inventario (Solo Lectura - Obsoleto)"),
             ("machote_path", "Ruta plantilla machote"),
@@ -40,12 +39,44 @@ class SettingsView(BaseView):
         mode_frame = ctk.CTkFrame(card, fg_color="transparent")
         mode_frame.grid(row=len(fields), column=0, sticky="ew", padx=8, pady=12)
         ctk.CTkLabel(mode_frame, text="Modo visual (Requiere Reinicio)", text_color=CURRENT_THEME["muted"]).pack(anchor="w")
-        self.mode_option = ctk.CTkOptionMenu(mode_frame, values=["Dark", "HoneyWhale", "Light", "System"], command=self.change_mode, fg_color=CURRENT_THEME["gold"], button_color=CURRENT_THEME["gold_hover"], text_color="#221A0C")
+        self.mode_option = ctk.CTkOptionMenu(mode_frame, values=["Dark", "HoneyWhale", "Custom", "Light", "System"], command=self.change_mode, fg_color=CURRENT_THEME["gold"], button_color=CURRENT_THEME["gold_hover"], text_color="#221A0C")
         self.mode_option.pack(anchor="w", pady=(6, 0))
         self.mode_option.set(self.app.app_state.config.get("theme_mode", "Dark"))
 
+        # Custom colors section
+        self.custom_colors_frame = ctk.CTkFrame(card, fg_color=CURRENT_THEME["panel_alt"], corner_radius=8)
+        self.custom_colors_frame.grid(row=len(fields) + 1, column=0, sticky="ew", padx=8, pady=12)
+        self.custom_colors_frame.grid_columnconfigure((0,1), weight=1)
+
+        ctk.CTkLabel(self.custom_colors_frame, text="Colores Personalizados (Modo 'Custom')", text_color=CURRENT_THEME["gold"], font=ctk.CTkFont(weight="bold")).grid(row=0, column=0, columnspan=2, pady=(10, 5))
+
+        custom_fields = [
+            ("logo_text", "Nombre del Software (Marca Blanca)", "MACHOTES OF TIME"),
+            ("custom_color_bg", "Color de Fondo (bg)", "#121212"),
+            ("custom_color_panel", "Color Panel (panel)", "#1E1E1E"),
+            ("custom_color_gold", "Color Primario (gold)", "#3498DB"),
+            ("custom_color_forest", "Color Secundario (forest)", "#2ECC71"),
+            ("custom_color_text", "Color de Texto (text)", "#FFFFFF"),
+        ]
+
+        self.custom_entries = {}
+        for idx, (key, label, default_val) in enumerate(custom_fields):
+            row = (idx // 2) + 1
+            col = idx % 2
+            f = ctk.CTkFrame(self.custom_colors_frame, fg_color="transparent")
+            f.grid(row=row, column=col, sticky="ew", padx=10, pady=5)
+            f.grid_columnconfigure(0, weight=1)
+            ctk.CTkLabel(f, text=label, text_color=CURRENT_THEME["muted"], font=ctk.CTkFont(size=11)).grid(row=0, column=0, sticky="w")
+            ce = ctk.CTkEntry(f, height=24)
+            ce.grid(row=1, column=0, sticky="ew", pady=(2, 0))
+            val = self.app.app_state.config.get(key, default_val)
+            ce.insert(0, str(val))
+            self.custom_entries[key] = ce
+
+        self._toggle_custom_colors(self.app.app_state.config.get("theme_mode", "Dark"))
+
         buttons_frame = ctk.CTkFrame(card, fg_color="transparent")
-        buttons_frame.grid(row=len(fields) + 1, column=0, sticky="ew", padx=8, pady=(8, 16))
+        buttons_frame.grid(row=len(fields) + 2, column=0, sticky="ew", padx=8, pady=(8, 16))
 
         ctk.CTkButton(buttons_frame, text="Guardar ajustes", fg_color=CURRENT_THEME["forest"], hover_color=CURRENT_THEME["forest_hover"], command=self.save).pack(side="left", padx=(0, 20))
 
@@ -95,9 +126,19 @@ class SettingsView(BaseView):
         else:
             ctk.set_appearance_mode("Dark")
 
+        self._toggle_custom_colors(mode)
         self.app.app_state.config["theme_mode"] = mode
         self.app.app_state.save_config()
         messagebox.showinfo("Reinicio Requerido", "Cambiar el modo visual de la aplicación requiere reiniciar para surtir efecto completo.")
+
+    def _toggle_custom_colors(self, mode):
+        if hasattr(self, 'custom_colors_frame'):
+            if mode == "Custom":
+                for entry in self.custom_entries.values():
+                    entry.configure(state="normal")
+            else:
+                for entry in self.custom_entries.values():
+                    entry.configure(state="disabled")
 
     def save(self):
         for key, entry in self.entries.items():
@@ -116,6 +157,12 @@ class SettingsView(BaseView):
                 self.app.app_state.config[key] = value_int
             else:
                 self.app.app_state.config[key] = value
+
+        # Save custom colors
+        for key, entry in self.custom_entries.items():
+            value = entry.get().strip()
+            self.app.app_state.config[key] = value
+
         self.app.app_state.save_config()
         self.app.apply_runtime_config()
         self.app.log("Ajustes guardados correctamente.")

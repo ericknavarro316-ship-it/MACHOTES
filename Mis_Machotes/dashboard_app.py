@@ -11,7 +11,7 @@ from tkinter import messagebox, ttk
 import machote_generator as mg
 from core.state import AppState
 import core.config as config
-from ui.components import TreeBundle, CURRENT_THEME
+from ui.components import TreeBundle, CURRENT_THEME, update_theme_colors
 from ui.views.dashboard_view import DashboardView
 from ui.views.inventory_view import InventoryView
 from ui.views.generator_view import GeneratorView
@@ -43,7 +43,29 @@ class ZeldaApp(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.app_state = AppState()
-        self.title("MACHOTES OF TIME · Hero's Admin Panel")
+
+        # Apply theme colors before building UI
+        theme_mode = self.app_state.config.get("theme_mode", "Dark")
+        custom_colors = {
+            "bg": self.app_state.config.get("custom_color_bg", "#121212"),
+            "panel": self.app_state.config.get("custom_color_panel", "#1E1E1E"),
+            "panel_alt": self.app_state.config.get("custom_color_panel", "#2C2C2C"), # slightly lighter than panel usually, but user only inputs panel
+            "gold": self.app_state.config.get("custom_color_gold", "#3498DB"),
+            "gold_hover": self.app_state.config.get("custom_color_gold", "#2980B9"),
+            "forest": self.app_state.config.get("custom_color_forest", "#2ECC71"),
+            "forest_hover": self.app_state.config.get("custom_color_forest", "#27AE60"),
+            "emerald": self.app_state.config.get("custom_color_forest", "#2ECC71"), # Use forest for emerald
+            "text": self.app_state.config.get("custom_color_text", "#FFFFFF"),
+            "muted": "#95A5A6",
+            "danger": "#E74C3C",
+            "danger_hover": "#C0392B",
+            "warning": "#F1C40F",
+            "sky": "#3498DB",
+        }
+        update_theme_colors(theme_mode, custom_colors)
+
+        app_name = self.app_state.config.get("logo_text", "MACHOTES OF TIME")
+        self.title(f"{app_name} · Admin Panel")
         self.geometry("1480x900")
         self.minsize(1280, 760)
         self.configure(fg_color=CURRENT_THEME["bg"])
