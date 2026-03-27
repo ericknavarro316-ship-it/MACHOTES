@@ -1,6 +1,8 @@
 from reportlab.lib import colors
+import os
+from pathlib import Path
 from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image as RLImage
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 
@@ -31,8 +33,49 @@ def export_machote_pdf(pdf_path, filename, empresa, rfc, fecha, items, app_insta
 
     # Header Information
     title_text = f"Reporte de Machote"
-    elements.append(Paragraph(title_text, title_style))
-    elements.append(Spacer(1, 0.2 * inch))
+
+    # Check for custom logo
+    logo_path = Path("Mis_Machotes/app_data/custom_logo.png").resolve()
+    # If app_instance is passed, try to use its config path
+    if app_instance:
+        from core.config import OUTPUT_DIR
+        logo_path = Path(app_instance.app_state.config.get("output_dir", OUTPUT_DIR)).parent / "app_data" / "custom_logo.png"
+
+    if logo_path.exists():
+        try:
+            from PIL import Image
+            img = Image.open(logo_path)
+            w, h = img.size
+            # Max width 2 inches, keep aspect ratio
+            max_width = 2 * inch
+            if w > max_width:
+                aspect = h / float(w)
+                w = max_width
+                h = w * aspect
+            else:
+                aspect = h / float(w)
+                w = max_width
+                h = w * aspect
+
+            rl_img = RLImage(str(logo_path), width=w, height=h)
+
+            # Use a table to place logo and title side by side
+            header_table = Table([[rl_img, Paragraph(title_text, title_style)]], colWidths=[2.5*inch, 4*inch])
+            header_table.setStyle(TableStyle([
+                ('ALIGN', (0, 0), (0, 0), 'LEFT'),
+                ('VALIGN', (0, 0), (0, 0), 'MIDDLE'),
+                ('ALIGN', (1, 0), (1, 0), 'CENTER'),
+                ('VALIGN', (1, 0), (1, 0), 'MIDDLE'),
+            ]))
+            elements.append(header_table)
+            elements.append(Spacer(1, 0.3 * inch))
+        except Exception as e:
+            print(f"Error cargando logo para PDF: {e}")
+            elements.append(Paragraph(title_text, title_style))
+            elements.append(Spacer(1, 0.2 * inch))
+    else:
+        elements.append(Paragraph(title_text, title_style))
+        elements.append(Spacer(1, 0.2 * inch))
 
     elements.append(Paragraph(f"<b>Archivo:</b> {filename}", subtitle_style))
     elements.append(Paragraph(f"<b>Empresa:</b> {empresa}", subtitle_style))

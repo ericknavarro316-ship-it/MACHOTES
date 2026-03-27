@@ -48,7 +48,13 @@ class SettingsView(BaseView):
         self.custom_colors_frame.grid(row=len(fields) + 1, column=0, sticky="ew", padx=8, pady=12)
         self.custom_colors_frame.grid_columnconfigure((0,1), weight=1)
 
-        ctk.CTkLabel(self.custom_colors_frame, text="Colores Personalizados (Modo 'Custom')", text_color=CURRENT_THEME["gold"], font=ctk.CTkFont(weight="bold")).grid(row=0, column=0, columnspan=2, pady=(10, 5))
+        header_frame_custom = ctk.CTkFrame(self.custom_colors_frame, fg_color="transparent")
+        header_frame_custom.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(10, 5))
+        header_frame_custom.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(header_frame_custom, text="Marca Blanca (Modo 'Custom')", text_color=CURRENT_THEME["gold"], font=ctk.CTkFont(weight="bold")).grid(row=0, column=0, sticky="w", padx=10)
+
+        self.btn_load_logo = ctk.CTkButton(header_frame_custom, text="Subir Logo y Extraer Colores", fg_color=CURRENT_THEME["sky"], hover_color="#4F7C7A", command=self.upload_logo_and_extract_colors)
+        self.btn_load_logo.grid(row=0, column=1, sticky="e", padx=(0, 10))
 
         custom_fields = [
             ("logo_text", "Nombre del Software (Marca Blanca)", "MACHOTES OF TIME"),
@@ -131,14 +137,72 @@ class SettingsView(BaseView):
         self.app.app_state.save_config()
         messagebox.showinfo("Reinicio Requerido", "Cambiar el modo visual de la aplicación requiere reiniciar para surtir efecto completo.")
 
+    def upload_logo_and_extract_colors(self):
+        from tkinter import filedialog
+        import shutil
+        from pathlib import Path
+
+        file_path = filedialog.askopenfilename(
+            title="Seleccionar Logo de Empresa",
+            filetypes=[("Archivos de imagen", "*.png *.jpg *.jpeg *.bmp"), ("Todos", "*.*")]
+        )
+        if not file_path:
+            return
+
+        try:
+            # Import and run extractor
+            from utils.color_extractor import get_dominant_colors
+            colors = get_dominant_colors(file_path, num_colors=2)
+
+            # Save the image to app_data
+            from core.config import OUTPUT_DIR
+            dest_path = Path(self.app.app_state.config.get("output_dir", OUTPUT_DIR)).parent / "app_data" / "custom_logo.png"
+            dest_path.resolve().parent.mkdir(parents=True, exist_ok=True)
+
+            from PIL import Image
+            img = Image.open(file_path)
+            # Resize image if it's too large to save space (e.g., max 500x500)
+            img.thumbnail((500, 500))
+            # Convert to RGBA so it supports transparency if saving as PNG
+            if img.mode != 'RGBA':
+                img = img.convert('RGBA')
+            img.save(dest_path, "PNG")
+
+            if colors:
+                primary, secondary = colors
+
+                # Fill the entries
+                self.custom_entries["custom_color_gold"].delete(0, "end")
+                self.custom_entries["custom_color_gold"].insert(0, primary)
+
+                self.custom_entries["custom_color_forest"].delete(0, "end")
+                self.custom_entries["custom_color_forest"].insert(0, secondary)
+
+                # Auto set mode to Custom
+                self.mode_option.set("Custom")
+                self._toggle_custom_colors("Custom")
+
+                messagebox.showinfo("Logo Cargado", f"Logo guardado exitosamente.\n\nColores detectados:\nPrimario: {primary}\nSecundario: {secondary}\n\nPresiona 'Guardar ajustes' para aplicar.")
+            else:
+                messagebox.showinfo("Logo Cargado", "Logo guardado, pero no se pudieron detectar colores dominantes claros.\nPuedes configurarlos manualmente.")
+
+        except Exception as e:
+            import traceback
+            self.app.log(f"Error procesando logo:\n{traceback.format_exc()}")
+            messagebox.showerror("Error", f"No se pudo procesar la imagen:\n{e}")
+
     def _toggle_custom_colors(self, mode):
         if hasattr(self, 'custom_colors_frame'):
             if mode == "Custom":
                 for entry in self.custom_entries.values():
                     entry.configure(state="normal")
+                if hasattr(self, 'btn_load_logo'):
+                    self.btn_load_logo.configure(state="normal")
             else:
                 for entry in self.custom_entries.values():
                     entry.configure(state="disabled")
+                if hasattr(self, 'btn_load_logo'):
+                    self.btn_load_logo.configure(state="disabled")
 
     def save(self):
         for key, entry in self.entries.items():

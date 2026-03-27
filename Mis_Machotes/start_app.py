@@ -88,11 +88,20 @@ def create_splash_screen():
 
     splash.configure(bg=bg_color, highlightbackground=gold_color, highlightthickness=2)
 
-    # Try to load the triforce image
+    # Try to load the custom logo or triforce image
     try:
         from PIL import Image, ImageTk
-        img = Image.open(BASE_DIR / "triforce.png")
-        img = img.resize((80, 80), Image.Resampling.LANCZOS)
+        custom_logo_path = APP_DATA_DIR / "custom_logo.png"
+        if custom_logo_path.exists():
+            img = Image.open(custom_logo_path)
+            # Calculate height to keep aspect ratio based on max width 120
+            w, h = img.size
+            new_h = int(120 * h / w)
+            img = img.resize((120, new_h), Image.Resampling.LANCZOS)
+        else:
+            img = Image.open(BASE_DIR / "triforce.png")
+            img = img.resize((80, 80), Image.Resampling.LANCZOS)
+
         splash.photo = ImageTk.PhotoImage(img)
         img_label = tk.Label(splash, image=splash.photo, bg=bg_color)
         img_label.pack(pady=(20, 0))

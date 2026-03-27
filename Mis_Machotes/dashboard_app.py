@@ -124,7 +124,27 @@ class ZeldaApp(ctk.CTk):
         self.sidebar_header = ctk.CTkFrame(self.sidebar, fg_color="transparent")
         self.sidebar_header.grid(row=0, column=0, sticky="ew", padx=16, pady=(16, 6))
         self.sidebar_header.grid_columnconfigure(0, weight=1)
-        self.logo_label = ctk.CTkLabel(self.sidebar_header, text=self.app_state.config.get("logo_text", "MACHOTES OF TIME"), text_color=CURRENT_THEME["gold"], justify="left", font=ctk.CTkFont(size=28, weight="bold"))
+
+        # Load custom logo image if exists
+        self.logo_img_ctk = None
+        self.logo_img_collapsed_ctk = None
+        self.has_custom_logo = False
+        try:
+            from PIL import Image
+            custom_logo_path = Path(self.app_state.config.get("output_dir", config.OUTPUT_DIR)).parent / "app_data" / "custom_logo.png"
+            if custom_logo_path.exists():
+                img = Image.open(custom_logo_path)
+                self.logo_img_ctk = ctk.CTkImage(light_image=img, dark_image=img, size=(160, max(40, int(160 * img.height / img.width))))
+                self.logo_img_collapsed_ctk = ctk.CTkImage(light_image=img, dark_image=img, size=(40, max(10, int(40 * img.height / img.width))))
+                self.has_custom_logo = True
+        except Exception as e:
+            self.log(f"No se pudo cargar el logo personalizado: {e}")
+
+        if self.has_custom_logo:
+            self.logo_label = ctk.CTkLabel(self.sidebar_header, text="", image=self.logo_img_ctk, justify="center")
+        else:
+            self.logo_label = ctk.CTkLabel(self.sidebar_header, text=self.app_state.config.get("logo_text", "MACHOTES OF TIME"), text_color=CURRENT_THEME["gold"], justify="left", font=ctk.CTkFont(size=28, weight="bold"))
+
         self.logo_label.grid(row=0, column=0, sticky="w")
         self.sidebar_toggle_btn = ctk.CTkButton(
             self.sidebar_header,
@@ -135,7 +155,9 @@ class ZeldaApp(ctk.CTk):
             command=self.toggle_sidebar,
         )
         self.sidebar_toggle_btn.grid(row=0, column=1, sticky="e", padx=(8, 0))
-        self.sidebar_subtitle = ctk.CTkLabel(self.sidebar, text="Panel inspirado en Ocarina of Time", text_color=CURRENT_THEME["text"], font=ctk.CTkFont(size=12))
+
+        subtitle_text = "Panel de control administrativo" if self.has_custom_logo else "Panel inspirado en Ocarina of Time"
+        self.sidebar_subtitle = ctk.CTkLabel(self.sidebar, text=subtitle_text, text_color=CURRENT_THEME["text"], font=ctk.CTkFont(size=12))
         self.sidebar_subtitle.grid(row=1, column=0, sticky="w", padx=20, pady=(0, 20))
 
         self.nav_buttons = {}
@@ -166,7 +188,10 @@ class ZeldaApp(ctk.CTk):
         self.sidebar_collapsed = not self.sidebar_collapsed
         if self.sidebar_collapsed:
             self.sidebar.configure(width=82)
-            self.logo_label.configure(text="△")
+            if self.has_custom_logo:
+                self.logo_label.configure(image=self.logo_img_collapsed_ctk, text="")
+            else:
+                self.logo_label.configure(text="△")
             self.sidebar_subtitle.grid_remove()
             self.quick.grid_remove()
             self.sidebar_toggle_btn.configure(text="👁")
@@ -175,7 +200,10 @@ class ZeldaApp(ctk.CTk):
                 btn.configure(text=icon, anchor="center")
         else:
             self.sidebar.configure(width=270)
-            self.logo_label.configure(text=self.app_state.config.get("logo_text", "MACHOTES OF TIME"))
+            if self.has_custom_logo:
+                self.logo_label.configure(image=self.logo_img_ctk, text="")
+            else:
+                self.logo_label.configure(text=self.app_state.config.get("logo_text", "MACHOTES OF TIME"))
             self.sidebar_subtitle.grid()
             self.quick.grid()
             self.sidebar_toggle_btn.configure(text="▲")
