@@ -36,10 +36,12 @@ HW_THEME = {
 
 CURRENT_THEME = OOT_THEME.copy()
 
-def update_theme_colors(theme_name):
+def update_theme_colors(theme_name, custom_colors=None):
     global CURRENT_THEME
     if theme_name == "HoneyWhale":
         CURRENT_THEME.update(HW_THEME)
+    elif theme_name == "Custom" and custom_colors:
+        CURRENT_THEME.update(custom_colors)
     else:
         CURRENT_THEME.update(OOT_THEME)
 

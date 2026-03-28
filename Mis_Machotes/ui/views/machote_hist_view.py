@@ -46,10 +46,12 @@ class MachoteHistoryView(BaseView):
         self.lbl_title = ctk.CTkLabel(header_frame, text="Selecciona un machote", font=ctk.CTkFont(size=18, weight="bold"), text_color=CURRENT_THEME["gold"])
         self.lbl_title.grid(row=0, column=0, sticky="w")
 
-        self.btn_open = ctk.CTkButton(header_frame, text="Abrir Archivo", fg_color=CURRENT_THEME["sky"], hover_color="#4F7C7A", state="disabled", command=self.open_machote_file)
-        self.btn_open.grid(row=0, column=1, sticky="e", padx=(0, 10))
+        self.btn_export_pdf = ctk.CTkButton(header_frame, text="Exportar a PDF", fg_color=CURRENT_THEME["forest"], hover_color=CURRENT_THEME["forest_hover"], state="disabled", command=self.export_machote_pdf)
+        self.btn_export_pdf.grid(row=0, column=1, sticky="e", padx=(0, 10))
+        self.btn_open = ctk.CTkButton(header_frame, text="Abrir Excel", fg_color=CURRENT_THEME["sky"], hover_color="#4F7C7A", state="disabled", command=self.open_machote_file)
+        self.btn_open.grid(row=0, column=2, sticky="e", padx=(0, 10))
         self.btn_undo = ctk.CTkButton(header_frame, text="Deshacer Machote", fg_color=CURRENT_THEME["danger"], hover_color=CURRENT_THEME["danger_hover"], state="disabled", command=self.undo_machote)
-        self.btn_undo.grid(row=0, column=2, sticky="e")
+        self.btn_undo.grid(row=0, column=3, sticky="e")
 
         self.summary_frame = ctk.CTkFrame(details_card, fg_color=CURRENT_THEME["panel_alt"], corner_radius=12)
         self.summary_frame.grid(row=1, column=0, sticky="ew", padx=18, pady=(0, 14))
@@ -90,6 +92,7 @@ class MachoteHistoryView(BaseView):
             self.tree.insert("", "end", iid=str(idx), values=(entry.get("timestamp", ""), os.path.basename(archivo)))
 
         # Reset right panel
+        self.btn_export_pdf.configure(state="disabled")
         self.btn_open.configure(state="disabled")
         self.btn_undo.configure(state="disabled")
         self.lbl_title.configure(text="Selecciona un machote")
@@ -127,6 +130,7 @@ class MachoteHistoryView(BaseView):
             self.lbl_pieces.configure(text=f"Piezas: {details.get('series_coincidentes', 0)}")
             db_machote_name = f"EXT: {filename}"
 
+        self.btn_export_pdf.configure(state="normal")
         self.btn_open.configure(state="normal")
         self.btn_undo.configure(state="normal")
 
@@ -232,3 +236,87 @@ class MachoteHistoryView(BaseView):
         except Exception as exc:
             self.app.log(f"Error abriendo archivo {archivo}: {exc}")
             messagebox.showerror("Error", f"No se pudo abrir el archivo:\n{exc}")
+
+    def export_machote_pdf(self):
+        archivo = self.get_selected_machote()
+        if not archivo:
+            messagebox.showwarning("Aviso", "Selecciona un machote de la lista para exportar.")
+            return
+
+        import os
+        filename = os.path.basename(archivo)
+
+        selected = self.tree.selection()
+        idx = int(selected[0])
+        machotes = [m for m in self.app.app_state.history if m.get("type") in ("machote", "machote_externo")]
+        entry = machotes[idx]
+        details = entry.get("details", {})
+
+        if entry.get("type") == "machote":
+            db_machote_name = filename
+            empresa = details.get('empresa', 'N/A')
+            rfc = details.get('rfc', 'N/A')
+        else:
+            db_machote_name = f"EXT: {filename}"
+            empresa = "(Externa)"
+            rfc = "N/A"
+
+        inventory = self.app.get_inventory_data(refresh=False)
+        items = []
+        if inventory and inventory.get("usados") is not None:
+            df_usados = inventory.get("usados")
+            if "MACHOTE" in df_usados.columns:
+                machote_items = df_usados[df_usados["MACHOTE"].astype(str) == db_machote_name]
+                for _, row in machote_items.iterrows():
+                    items.append({
+                        "sucursal": str(row.get("SUCURSAL", "")),
+                        "modelo": str(row.get("MODELO BASE", "")),
+                        "serie": str(row.get("No de SERIE:", "")),
+                        "total": row.get("TOTAL", 0)
+                    })
+
+        if not items:
+            messagebox.showwarning("Aviso", "No hay artículos en el inventario para exportar de este machote.")
+            return
+
+        from tkinter import filedialog
+        default_pdf_name = os.path.splitext(filename)[0] + ".pdf"
+        pdf_path = filedialog.asksaveasfilename(
+            defaultextension=".pdf",
+            initialfile=default_pdf_name,
+            filetypes=[("PDF files", "*.pdf")],
+            title="Guardar PDF de Machote"
+        )
+
+        if not pdf_path:
+            return
+
+        def _task():
+            try:
+                from utils.pdf_exporter import export_machote_pdf
+                fecha = entry.get('timestamp', '').split(' ')[0]
+                export_machote_pdf(pdf_path, filename, empresa, rfc, fecha, items, self.app)
+                self.app.after(0, lambda: self._pdf_success(pdf_path))
+            except Exception as e:
+                import traceback
+                self.app.log(f"Error exportando PDF:\n{traceback.format_exc()}")
+                self.app.after(0, lambda: messagebox.showerror("Error", f"No se pudo exportar el PDF:\n{e}"))
+
+        self.app.run_in_thread(_task)
+
+    def _pdf_success(self, pdf_path):
+        import platform
+        import subprocess
+        import os
+
+        self.app.log(f"PDF exportado exitosamente a: {pdf_path}")
+        if messagebox.askyesno("Éxito", "PDF exportado correctamente.\n¿Deseas abrirlo ahora?"):
+            try:
+                if platform.system() == 'Windows':
+                    os.startfile(pdf_path)
+                elif platform.system() == 'Darwin':
+                    subprocess.call(('open', pdf_path))
+                else:
+                    subprocess.call(('xdg-open', pdf_path))
+            except Exception as exc:
+                self.app.log(f"Error abriendo PDF {pdf_path}: {exc}")

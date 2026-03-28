@@ -6,3 +6,4 @@ pymupdf
 openpyxl
 plyer
 defusedxml
+reportlab

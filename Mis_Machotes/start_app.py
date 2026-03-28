@@ -28,7 +28,9 @@ REQUIRED_MODULES = {
     "fitz": "pymupdf",
     "openpyxl": "openpyxl",
     "plyer": "plyer",
-    "defusedxml": "defusedxml"
+    "defusedxml": "defusedxml",
+    "reportlab": "reportlab",
+    "PIL": "Pillow"
 }
 REQUIRED_FILES = [
     BASE_DIR / "dashboard_app.py",
@@ -60,25 +62,54 @@ def create_splash_screen():
     y = (screen_height / 2) - (height / 2)
     splash.geometry(f'{width}x{height}+{int(x)}+{int(y)}')
 
-    # Zelda OOT theme colors
+    # Try to load custom theme colors if they exist
     bg_color = "#0F1A12"
     gold_color = "#D7B56D"
     text_color = "#F3ECD2"
+    app_name = "MACHOTES OF TIME"
+
+    try:
+        import json
+        config_path = APP_DATA_DIR / "config.json"
+        if config_path.exists():
+            with open(config_path, "r", encoding="utf-8") as f:
+                config_data = json.load(f)
+                theme_mode = config_data.get("theme_mode", "Dark")
+                if theme_mode == "Custom":
+                    bg_color = config_data.get("custom_color_bg", bg_color)
+                    gold_color = config_data.get("custom_color_gold", gold_color)
+                    text_color = config_data.get("custom_color_text", text_color)
+                elif theme_mode == "HoneyWhale":
+                    bg_color = "#121212"
+                    gold_color = "#FF3B30"
+                    text_color = "#FFFFFF"
+                app_name = config_data.get("logo_text", app_name)
+    except Exception:
+        pass
 
     splash.configure(bg=bg_color, highlightbackground=gold_color, highlightthickness=2)
 
-    # Try to load the triforce image
+    # Try to load the custom logo or triforce image
     try:
         from PIL import Image, ImageTk
-        img = Image.open(BASE_DIR / "triforce.png")
-        img = img.resize((80, 80), Image.Resampling.LANCZOS)
+        custom_logo_path = APP_DATA_DIR / "custom_logo.png"
+        if custom_logo_path.exists():
+            img = Image.open(custom_logo_path)
+            # Calculate height to keep aspect ratio based on max width 120
+            w, h = img.size
+            new_h = int(120 * h / w)
+            img = img.resize((120, new_h), Image.Resampling.LANCZOS)
+        else:
+            img = Image.open(BASE_DIR / "triforce.png")
+            img = img.resize((80, 80), Image.Resampling.LANCZOS)
+
         splash.photo = ImageTk.PhotoImage(img)
         img_label = tk.Label(splash, image=splash.photo, bg=bg_color)
         img_label.pack(pady=(20, 0))
     except Exception:
         pass
 
-    title_label = tk.Label(splash, text="MACHOTES OF TIME", font=("Segoe UI", 24, "bold"), bg=bg_color, fg=gold_color)
+    title_label = tk.Label(splash, text=app_name, font=("Segoe UI", 24, "bold"), bg=bg_color, fg=gold_color)
     title_label.pack(expand=True, pady=(10, 0))
 
     loading_label = tk.Label(splash, text="Cargando el Reino...", font=("Segoe UI", 12), bg=bg_color, fg=text_color)
