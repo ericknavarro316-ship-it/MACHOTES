@@ -567,19 +567,22 @@ class ZeldaApp(ctk.CTk):
                 except:
                     pass
 
-        self.after(0, lambda: self._on_watched_pdf_success(total_items_imported, total_pdfs_imported, pdfs_to_review))
+        total_pdfs_processed = len(pdf_files)
+        self.after(0, lambda: self._on_watched_pdf_success(total_items_imported, total_pdfs_processed, pdfs_to_review))
 
-    def _on_watched_pdf_success(self, items_imported, pdfs_imported, pdfs_to_review):
-        if items_imported > 0 or pdfs_to_review > 0:
+    def _on_watched_pdf_success(self, items_imported, total_pdfs_processed, pdfs_to_review):
+        if total_pdfs_processed > 0:
             self.refresh_data(force=True)
             try:
                 from plyer import notification
                 app_name = self.app_state.config.get("logo_text", "MACHOTES OF TIME")
 
                 if items_imported > 0 and pdfs_to_review == 0:
-                    msg = f"Asistente: Auto-carga completada. {items_imported} artículos nuevos de {pdfs_imported} PDF(s)."
+                    msg = f"Asistente: Auto-carga completada. {items_imported} artículos nuevos de {total_pdfs_processed} PDF(s)."
                 elif items_imported > 0 and pdfs_to_review > 0:
                     msg = f"Asistente: {items_imported} artículos cargados. {pdfs_to_review} PDF(s) requieren revisión manual."
+                elif items_imported == 0 and pdfs_to_review == 0:
+                    msg = f"Asistente: Auto-carga completada. 0 artículos nuevos de {total_pdfs_processed} PDF(s) (Duplicados ignorados)."
                 else:
                     msg = f"Asistente: {pdfs_to_review} PDF(s) requieren revisión manual (exceden warnings)."
 

@@ -36,7 +36,11 @@ def main():
     # Verify icon exists, fallback to no icon if missing
     icon_args = []
     if (project_dir / "triforce.ico").exists():
-        icon_args = ["--icon", "triforce.ico", "--add-data", "triforce.ico:."]
+        icon_args = ["--icon", "triforce.ico", "--add-data", f"triforce.ico{os.pathsep}."]
+
+    png_args = []
+    if (project_dir / "triforce.png").exists():
+        png_args = ["--add-data", f"triforce.png{os.pathsep}."]
 
     # Building the command
     command = [
@@ -45,13 +49,10 @@ def main():
         "--onedir",
         "--windowed",
         "--name", "Machotes",
-    ] + icon_args + [
+    ] + icon_args + png_args + [
 
         # Include CustomTkinter assets
-        "--add-data", f"{ctk_path}:customtkinter/",
-
-        # Include your own assets
-        "--add-data", "triforce.png:.",
+        "--add-data", f"{ctk_path}{os.pathsep}customtkinter/",
 
         # Hidden imports that PyInstaller sometimes misses
         "--hidden-import", "pandas",
