@@ -24,9 +24,15 @@ class DashboardView(BaseView):
         controls.grid(row=1, column=0, sticky="ew", padx=18, pady=(0, 12))
 
         self.filter_var = ctk.StringVar(value="Todos")
-        self.segment = ctk.CTkSegmentedButton(controls, values=["Todos", "Disponibles", "Usados", "XML"], variable=self.filter_var, command=lambda _: self.refresh(), selected_color=CURRENT_THEME["gold"], selected_hover_color=CURRENT_THEME["gold_hover"], unselected_color=CURRENT_THEME["panel_alt"], unselected_hover_color=CURRENT_THEME["panel"])
-        self.segment.pack(anchor="w")
-        ctk.CTkButton(controls, text="Exportar Dashboard", width=150, fg_color=CURRENT_THEME["panel_alt"], hover_color=CURRENT_THEME["gold_hover"], command=self.export_dashboard_snapshot).pack(anchor="e")
+        top_controls_row = ctk.CTkFrame(controls, fg_color="transparent")
+        top_controls_row.pack(fill="x")
+
+        self.segment = ctk.CTkSegmentedButton(top_controls_row, values=["Todos", "Disponibles", "Usados", "XML"], variable=self.filter_var, command=lambda _: self.refresh(), selected_color=CURRENT_THEME["gold"], selected_hover_color=CURRENT_THEME["gold_hover"], unselected_color=CURRENT_THEME["panel_alt"], unselected_hover_color=CURRENT_THEME["panel"])
+        self.segment.pack(side="left")
+
+        ctk.CTkButton(top_controls_row, text="Reporte Ejecutivo", width=140, fg_color=CURRENT_THEME["forest"], hover_color=CURRENT_THEME["forest_hover"], command=self.export_executive_report).pack(side="right", padx=(10, 0))
+        ctk.CTkButton(top_controls_row, text="Exportar Datos Excel", width=140, fg_color=CURRENT_THEME["panel_alt"], hover_color=CURRENT_THEME["gold_hover"], command=self.export_dashboard_snapshot).pack(side="right")
+
         period_row = ctk.CTkFrame(controls, fg_color="transparent")
         period_row.pack(anchor="w", pady=(8, 0))
         ctk.CTkLabel(period_row, text="Periodo:", text_color=CURRENT_THEME["muted"]).pack(side="left", padx=(0, 8))
@@ -380,12 +386,91 @@ class DashboardView(BaseView):
 
                 inv_view.refresh()
 
+    def export_executive_report(self):
+        from utils.pdf_exporter import export_executive_report_pdf
+
+        out_path = filedialog.asksaveasfilename(
+            defaultextension=".pdf",
+            filetypes=[("PDF", "*.pdf")],
+            title="Exportar Reporte Ejecutivo",
+            initialfile=f"Reporte_Ejecutivo_{datetime.now().strftime('%Y%m%d')}.pdf",
+        )
+        if not out_path:
+            return
+
+        try:
+            kpis = {
+                "Rupias Totales": self.metric_labels["total"].cget("text"),
+                "Reliquias Activas": self.metric_labels["pieces"].cget("text"),
+                "Participación": self.metric_labels["share"].cget("text"),
+                "Ticket Promedio": self.metric_labels["avg"].cget("text"),
+                "Comparativo": self.compare_label.cget("text"),
+            }
+
+            filters = {
+                "Estado": self.filter_var.get(),
+                "Periodo": self.period_var.get(),
+                "Desde": self.from_date_entry.get() or "-",
+                "Hasta": self.to_date_entry.get() or "-",
+            }
+
+            rows = []
+            for item_id in self.summary_tree.get_children():
+                values = self.summary_tree.item(item_id, "values")
+                rows.append(values)
+
+            state_rows = []
+            for item_id in self.branch_state_tree.get_children():
+                values = self.branch_state_tree.item(item_id, "values")
+                state_rows.append(values)
+
+            def _task():
+                try:
+                    export_executive_report_pdf(out_path, kpis, filters, rows, state_rows, self.app)
+                    self.app.after(0, lambda: self._report_success(out_path))
+                except Exception as e:
+                    import traceback
+                    self.app.log(f"Error generando PDF Ejecutivo: {traceback.format_exc()}")
+                    self.app.after(0, lambda: messagebox.showerror("Error", f"No se pudo generar el reporte.\n\n{e}"))
+
+            self.app.run_in_thread(_task)
+
+        except Exception as exc:
+            self.app.log(f"Error preparando reporte: {exc}")
+            messagebox.showerror("Error", f"Error preparando los datos.\n\n{exc}")
+
+    def _report_success(self, path):
+        self.app.log(f"Reporte ejecutivo generado: {path}")
+        try:
+            from plyer import notification
+            app_name = self.app.app_state.config.get("logo_text", "MACHOTES OF TIME")
+            notification.notify(
+                title=app_name,
+                message=f"Reporte Ejecutivo PDF generado exitosamente.",
+                app_name=app_name,
+                timeout=5
+            )
+        except Exception as e:
+            self.app.log(f"No se pudo mostrar la notificación nativa: {e}")
+
+        import platform, subprocess, os
+        if messagebox.askyesno("Éxito", "Reporte ejecutivo generado correctamente.\n¿Deseas abrirlo ahora?"):
+            try:
+                if platform.system() == 'Windows':
+                    os.startfile(path)
+                elif platform.system() == 'Darwin':
+                    subprocess.call(('open', path))
+                else:
+                    subprocess.call(('xdg-open', path))
+            except Exception as e:
+                self.app.log(f"Error abriendo PDF: {e}")
+
     def export_dashboard_snapshot(self):
         out_path = filedialog.asksaveasfilename(
             defaultextension=".xlsx",
-            filetypes=[("Excel", "*.xlsx"), ("PDF", "*.pdf")],
-            title="Exportar Dashboard (Excel/PDF)",
-            initialfile="Dashboard_Resumen.xlsx",
+            filetypes=[("Excel", "*.xlsx")],
+            title="Exportar Datos Dashboard",
+            initialfile="Dashboard_Datos.xlsx",
         )
         if not out_path:
             return

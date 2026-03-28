@@ -446,10 +446,11 @@ class ImportView(BaseView):
         self.app.log(f"Reporte post-carga: seleccionados={len(selected_items)} warnings_parseo={len(self.parse_warnings)}")
         self.app.log(f"Mercancía importada: {len(selected_items)} piezas desde {len(pdf_paths)} PDF(s).")
         try:
+            app_name = self.app.app_state.config.get("logo_text", "MACHOTES OF TIME")
             notification.notify(
-                title="MACHOTES OF TIME",
+                title=app_name,
                 message=f"Carga completada: {len(selected_items)} piezas guardadas en base de datos.",
-                app_name="MACHOTES OF TIME",
+                app_name=app_name,
                 timeout=5
             )
         except Exception as e:

@@ -239,10 +239,11 @@ class XMLView(BaseView):
         self.summary_label.configure(text="Sincronización de UUID completada.", text_color=CURRENT_THEME["emerald"])
         self.app.log(f"XMLs conciliados desde {folder}")
         try:
+            app_name = self.app.app_state.config.get("logo_text", "MACHOTES OF TIME")
             notification.notify(
-                title="MACHOTES OF TIME",
+                title=app_name,
                 message="Validación XML completada y UUIDs cruzados con el inventario.",
-                app_name="MACHOTES OF TIME",
+                app_name=app_name,
                 timeout=5
             )
         except Exception as e:

@@ -5,6 +5,115 @@ from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image as RLImage
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
+from datetime import datetime
+
+def get_logo_table(app_instance, title_text, title_style):
+    logo_path = Path("Mis_Machotes/app_data/custom_logo.png").resolve()
+    if app_instance:
+        from core.config import OUTPUT_DIR
+        logo_path = Path(app_instance.app_state.config.get("output_dir", OUTPUT_DIR)).parent / "app_data" / "custom_logo.png"
+
+    if logo_path.exists():
+        try:
+            from PIL import Image
+            img = Image.open(logo_path)
+            w, h = img.size
+            max_width = 2 * inch
+            if w > max_width:
+                aspect = h / float(w)
+                w = max_width
+                h = w * aspect
+            else:
+                aspect = h / float(w)
+                w = max_width
+                h = w * aspect
+
+            rl_img = RLImage(str(logo_path), width=w, height=h)
+            header_table = Table([[rl_img, Paragraph(title_text, title_style)]], colWidths=[2.5*inch, 4*inch])
+            header_table.setStyle(TableStyle([
+                ('ALIGN', (0, 0), (0, 0), 'LEFT'),
+                ('VALIGN', (0, 0), (0, 0), 'MIDDLE'),
+                ('ALIGN', (1, 0), (1, 0), 'CENTER'),
+                ('VALIGN', (1, 0), (1, 0), 'MIDDLE'),
+            ]))
+            return header_table
+        except Exception as e:
+            print(f"Error cargando logo para PDF: {e}")
+            return None
+    return None
+
+def export_executive_report_pdf(pdf_path, kpis, filters, summary_rows, state_rows, app_instance=None):
+    doc = SimpleDocTemplate(pdf_path, pagesize=letter)
+    elements = []
+    styles = getSampleStyleSheet()
+
+    title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontSize=20, spaceAfter=10, alignment=1)
+    subtitle_style = ParagraphStyle('Subtitle', parent=styles['Normal'], fontSize=12, spaceAfter=6)
+    section_style = ParagraphStyle('Section', parent=styles['Heading2'], fontSize=16, spaceAfter=10, spaceBefore=15, textColor=colors.HexColor("#2C3E50"))
+
+    # Header
+    title_text = f"Reporte Ejecutivo"
+    logo_table = get_logo_table(app_instance, title_text, title_style)
+
+    if logo_table:
+        elements.append(logo_table)
+        elements.append(Spacer(1, 0.3 * inch))
+    else:
+        elements.append(Paragraph(title_text, title_style))
+        elements.append(Spacer(1, 0.2 * inch))
+
+    # Meta
+    elements.append(Paragraph(f"<b>Generado:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", subtitle_style))
+    elements.append(Paragraph(f"<b>Estado Filtrado:</b> {filters.get('Estado', 'Todos')}", subtitle_style))
+    elements.append(Paragraph(f"<b>Periodo:</b> {filters.get('Periodo', 'Todo')} (De {filters.get('Desde')} a {filters.get('Hasta')})", subtitle_style))
+    elements.append(Spacer(1, 0.2 * inch))
+
+    # KPIs Table
+    elements.append(Paragraph("Indicadores Clave de Rendimiento (KPIs)", section_style))
+    kpi_data = []
+    for k, v in kpis.items():
+        kpi_data.append([Paragraph(f"<b>{k}</b>", styles['Normal']), Paragraph(str(v), styles['Normal'])])
+
+    kpi_table = Table(kpi_data, colWidths=[3*inch, 4*inch])
+    kpi_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor("#F8F9FA")),
+        ('GRID', (0, 0), (-1, -1), 1, colors.HexColor("#DEE2E6")),
+        ('PADDING', (0, 0), (-1, -1), 8),
+    ]))
+    elements.append(kpi_table)
+
+    # Branches Table
+    elements.append(Paragraph("Resumen por Sucursal", section_style))
+    summary_data = [["Sucursal", "Cantidad", "% del Total", "Total ($)"]] + summary_rows
+    summary_table = Table(summary_data, colWidths=[2.5*inch, 1.5*inch, 1.5*inch, 1.5*inch])
+    summary_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#2C3E50")),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor("#FFFFFF")),
+        ('GRID', (0, 0), (-1, -1), 1, colors.HexColor("#BDC3C7")),
+    ]))
+    elements.append(summary_table)
+
+    # State by Branch Table
+    elements.append(Paragraph("Desglose de Estados por Sucursal", section_style))
+    state_data = [["Sucursal", "% Disponibles", "% Usados", "% XML"]] + state_rows
+    state_table = Table(state_data, colWidths=[2.5*inch, 1.5*inch, 1.5*inch, 1.5*inch])
+    state_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#34495E")),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor("#FFFFFF")),
+        ('GRID', (0, 0), (-1, -1), 1, colors.HexColor("#BDC3C7")),
+    ]))
+    elements.append(state_table)
+
+    doc.build(elements)
+
 
 def export_machote_pdf(pdf_path, filename, empresa, rfc, fecha, items, app_instance=None):
     """

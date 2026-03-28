@@ -310,6 +310,18 @@ class MachoteHistoryView(BaseView):
         import os
 
         self.app.log(f"PDF exportado exitosamente a: {pdf_path}")
+        try:
+            from plyer import notification
+            app_name = self.app.app_state.config.get("logo_text", "MACHOTES OF TIME")
+            notification.notify(
+                title=app_name,
+                message=f"PDF exportado correctamente.",
+                app_name=app_name,
+                timeout=5
+            )
+        except Exception as e:
+            self.app.log(f"No se pudo mostrar la notificación nativa: {e}")
+
         if messagebox.askyesno("Éxito", "PDF exportado correctamente.\n¿Deseas abrirlo ahora?"):
             try:
                 if platform.system() == 'Windows':
