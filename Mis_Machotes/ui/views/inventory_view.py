@@ -67,7 +67,125 @@ class InventoryView(BaseView):
                 ("extra", "Extra", 180),
             ])
             tree.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
+
+            # Bind right click (Windows: <Button-3>, macOS: <Button-2> or <Control-1>)
+            tree.bind("<Button-3>", self._show_context_menu)
+
             self.trees[tab_name] = tree
+
+        # Create Context Menu
+        import tkinter as tk
+        self.context_menu = tk.Menu(self, tearoff=0, bg=CURRENT_THEME["panel"], fg=CURRENT_THEME["text"], activebackground=CURRENT_THEME["forest"], activeforeground=CURRENT_THEME["text"], bd=1, relief="solid")
+        self.context_menu.add_command(label="Ver Trazabilidad de la Pieza", command=self._show_traceability)
+
+    def _show_context_menu(self, event):
+        current_tab = self.tabview.get()
+        tree = self.trees[current_tab]
+
+        # Identify row under mouse
+        iid = tree.identify_row(event.y)
+        if iid:
+            tree.selection_set(iid) # Select the row
+            try:
+                self.context_menu.tk_popup(event.x_root, event.y_root)
+            finally:
+                self.context_menu.grab_release()
+
+    def _show_traceability(self):
+        current_tab = self.tabview.get()
+        tree = self.trees[current_tab]
+        selected = tree.selection()
+        if not selected:
+            return
+
+        values = tree.item(selected[0], "values")
+        if not values or len(values) < 4:
+            return
+
+        serie = str(values[3]).strip()
+        if not serie:
+            return
+
+        # Compile history events for this serial
+        history = self.app.app_state.history
+        trace = []
+
+        for event in history:
+            type_ = event.get("type", "")
+            action = event.get("action", "")
+            timestamp = event.get("timestamp", "")
+            details = event.get("details", {})
+
+            # Carga PDF
+            if type_ == "carga":
+                if serie in details.get("series_importadas", []):
+                    pdfs = details.get("pdfs", [])
+                    pdf_name = pdfs[0] if pdfs else "Desconocido"
+                    trace.append((timestamp, "Ingreso a Almacén (PDF)", f"Desde archivo: {pdf_name}"))
+
+            # Machote Generation (we will need to ensure series_usadas is saved going forward)
+            elif type_ in ("machote", "machote_externo"):
+                if serie in details.get("series_usadas", []):
+                    archivo = details.get("archivo", "Desconocido")
+                    trace.append((timestamp, "Asignación a Machote", f"Reservado en: {archivo}"))
+
+            # XML Sync
+            elif type_ == "xml":
+                if serie in details.get("series_actualizadas", []):
+                    carpeta = details.get("carpeta", "Desconocida")
+                    trace.append((timestamp, "Conciliación XML (Facturado)", f"Cruce exitoso en carpeta: {carpeta}"))
+
+            # Undos
+            elif type_ == "carga_undo":
+                # Undo events don't strictly have series lists in older versions, but if we do...
+                if "series" in details and serie in details["series"]:
+                    trace.append((timestamp, "Reversión de Carga", "Se eliminó el registro de importación."))
+            elif type_ == "xml_undo":
+                if "series" in details and serie in details["series"]:
+                    trace.append((timestamp, "Reversión XML", "Regresó al estado de machote previo."))
+            elif type_ == "machote_undo":
+                if "series" in details and serie in details["series"]:
+                    trace.append((timestamp, "Reversión Machote", "Regresó a estado DISPONIBLE."))
+
+        # If no trace found, add a generic message
+        if not trace:
+            trace.append(("-", "Registro Preexistente", "Esta pieza fue importada antes de implementar la trazabilidad o vino en la base inicial."))
+
+        # Sort trace chronologically
+        trace.sort(key=lambda x: x[0] if x[0] != "-" else "0000")
+
+        # Show Toplevel Window
+        top = ctk.CTkToplevel(self)
+        top.title(f"Trazabilidad: {serie}")
+        top.geometry("600x400")
+        top.attributes('-topmost', True)
+
+        # Center window
+        x = self.winfo_rootx() + (self.winfo_width() // 2) - 300
+        y = self.winfo_rooty() + (self.winfo_height() // 2) - 200
+        top.geometry(f"+{x}+{y}")
+
+        main_frame = ctk.CTkFrame(top, fg_color=CURRENT_THEME["panel"], corner_radius=10, border_color=CURRENT_THEME["gold"], border_width=1)
+        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+
+        ctk.CTkLabel(main_frame, text=f"Línea de Tiempo - Serie: {serie}", font=ctk.CTkFont(size=18, weight="bold"), text_color=CURRENT_THEME["gold"]).pack(pady=(15, 10))
+
+        scroll = ctk.CTkScrollableFrame(main_frame, fg_color="transparent")
+        scroll.pack(fill="both", expand=True, padx=10, pady=(0, 15))
+
+        for date, action, detail in trace:
+            card = ctk.CTkFrame(scroll, fg_color=CURRENT_THEME["panel_alt"], corner_radius=8)
+            card.pack(fill="x", pady=5)
+
+            ctk.CTkLabel(card, text=date, font=ctk.CTkFont(size=11, weight="bold"), text_color=CURRENT_THEME["emerald"], width=130, anchor="w").grid(row=0, column=0, padx=10, pady=8, sticky="nw")
+
+            content_frame = ctk.CTkFrame(card, fg_color="transparent")
+            content_frame.grid(row=0, column=1, sticky="w", pady=8)
+
+            ctk.CTkLabel(content_frame, text=action, font=ctk.CTkFont(size=13, weight="bold"), text_color=CURRENT_THEME["text"], anchor="w").pack(anchor="w")
+            ctk.CTkLabel(content_frame, text=detail, font=ctk.CTkFont(size=12), text_color=CURRENT_THEME["muted"], anchor="w").pack(anchor="w")
+
+        ctk.CTkButton(main_frame, text="Cerrar", width=100, fg_color=CURRENT_THEME["gold"], text_color="#0D0D12", hover_color=CURRENT_THEME["gold_hover"], command=top.destroy).pack(pady=(0, 15))
 
     def _update_options(self, inventory):
         dfs = [df for df in [inventory.get("reporte"), inventory.get("usados"), inventory.get("xml")] if df is not None and not df.empty]

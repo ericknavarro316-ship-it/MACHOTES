@@ -195,9 +195,9 @@ class MachoteHistoryView(BaseView):
 
         self.app.run_in_thread(_task)
 
-    def _undo_success(self, success, db_machote_name):
-        if success:
-            self.app.app_state.record_event("machote_undo", f"Machote deshecho: {db_machote_name}")
+    def _undo_success(self, series_restauradas, db_machote_name):
+        if series_restauradas:
+            self.app.app_state.record_event("machote_undo", f"Machote deshecho: {db_machote_name}", {"series": series_restauradas})
             self.app.refresh_data(force=True)
             self.refresh()
             self.app.log(f"Machote deshecho exitosamente: {db_machote_name}")

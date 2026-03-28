@@ -342,6 +342,7 @@ class GeneratorView(BaseView):
                 "cuenta": account,
                 "rfc": rfc,
                 "piezas": len(self.preview_df),
+                "series_usadas": self.preview_df['No de SERIE:'].astype(str).str.strip().tolist() if not self.preview_df.empty else []
             },
         )
         self.app.refresh_data(force=True)
@@ -382,7 +383,7 @@ class GeneratorView(BaseView):
             self.app.app_state.record_event(
                 "machote_externo",
                 f"Machote externo importado: {filename}",
-                {"archivo": file_path, "series_detectadas": detectadas, "series_coincidentes": len(coincidentes)}
+                {"archivo": file_path, "series_detectadas": detectadas, "series_coincidentes": len(coincidentes), "series_usadas": coincidentes}
             )
             self.app.refresh_data(force=True)
             self.app.history_view.refresh()

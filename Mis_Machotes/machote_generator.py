@@ -807,7 +807,7 @@ def deshacer_machote(nombre_machote):
         conn.close()
 
     print("Machote deshecho exitosamente en SQLite.")
-    return True
+    return series_a_restaurar
 
 def main():
     parser = argparse.ArgumentParser()

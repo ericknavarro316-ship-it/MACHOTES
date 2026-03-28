@@ -81,13 +81,42 @@ class SettingsView(BaseView):
 
         self._toggle_custom_colors(self.app.app_state.config.get("theme_mode", "Dark"))
 
+        # Auto Backup Configuration
+        self.backup_frame = ctk.CTkFrame(card, fg_color=CURRENT_THEME["panel_alt"], corner_radius=8)
+        self.backup_frame.grid(row=len(fields) + 2, column=0, sticky="ew", padx=8, pady=12)
+        self.backup_frame.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(self.backup_frame, text="Respaldos Automáticos de la Nube (Auto-Backup)", text_color=CURRENT_THEME["gold"], font=ctk.CTkFont(weight="bold")).grid(row=0, column=0, columnspan=2, sticky="w", padx=10, pady=(10, 5))
+
+        self.auto_backup_var = ctk.StringVar(value=str(self.app.app_state.config.get("auto_backup_enabled", "False")))
+        self.auto_backup_cb = ctk.CTkCheckBox(self.backup_frame, text="Crear respaldo automáticamente al cerrar la aplicación", variable=self.auto_backup_var, onvalue="True", offvalue="False", fg_color=CURRENT_THEME["forest"], hover_color=CURRENT_THEME["forest_hover"])
+        self.auto_backup_cb.grid(row=1, column=0, columnspan=2, sticky="w", padx=10, pady=5)
+
+        path_frame = ctk.CTkFrame(self.backup_frame, fg_color="transparent")
+        path_frame.grid(row=2, column=0, columnspan=2, sticky="ew", padx=10, pady=(0, 10))
+        path_frame.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(path_frame, text="Carpeta de Respaldos (ej. OneDrive, Dropbox, etc):", text_color=CURRENT_THEME["muted"], font=ctk.CTkFont(size=11)).grid(row=0, column=0, sticky="w")
+        self.backup_path_entry = ctk.CTkEntry(path_frame, height=28)
+        self.backup_path_entry.grid(row=1, column=0, sticky="ew", pady=(2, 0), padx=(0, 10))
+        self.backup_path_entry.insert(0, str(self.app.app_state.config.get("auto_backup_path", "")))
+
+        ctk.CTkButton(path_frame, text="Examinar...", width=80, fg_color=CURRENT_THEME["panel"], hover_color=CURRENT_THEME["gold_hover"], command=self._select_backup_folder).grid(row=1, column=1, sticky="e")
+
         buttons_frame = ctk.CTkFrame(card, fg_color="transparent")
-        buttons_frame.grid(row=len(fields) + 2, column=0, sticky="ew", padx=8, pady=(8, 16))
+        buttons_frame.grid(row=len(fields) + 3, column=0, sticky="ew", padx=8, pady=(8, 16))
 
         ctk.CTkButton(buttons_frame, text="Guardar ajustes", fg_color=CURRENT_THEME["forest"], hover_color=CURRENT_THEME["forest_hover"], command=self.save).pack(side="left", padx=(0, 20))
 
         self.btn_wipe = ctk.CTkButton(buttons_frame, text="Destruir Reino (Resetear BD)", fg_color=CURRENT_THEME["danger"], hover_color=CURRENT_THEME["danger_hover"], command=self.wipe_database)
         self.btn_wipe.pack(side="right")
+
+    def _select_backup_folder(self):
+        from tkinter import filedialog
+        folder = filedialog.askdirectory(title="Seleccionar Carpeta para Auto-Respaldo")
+        if folder:
+            self.backup_path_entry.delete(0, "end")
+            self.backup_path_entry.insert(0, folder)
 
     def wipe_database(self):
         confirm1 = messagebox.askyesno(
@@ -247,6 +276,10 @@ class SettingsView(BaseView):
         for key, entry in self.custom_entries.items():
             value = entry.get().strip()
             self.app.app_state.config[key] = value
+
+        # Save backup settings
+        self.app.app_state.config["auto_backup_enabled"] = self.auto_backup_var.get()
+        self.app.app_state.config["auto_backup_path"] = self.backup_path_entry.get().strip()
 
         self.app.app_state.save_config()
         self.app.apply_runtime_config()

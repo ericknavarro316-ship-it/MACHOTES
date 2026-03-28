@@ -286,7 +286,7 @@ class ImportView(BaseView):
         from database import db_manager
         try:
             deleted = db_manager.undo_last_import(imported_series)
-            self.app.app_state.record_event("carga_undo", f"Carga revertida: {deleted} piezas eliminadas.")
+            self.app.app_state.record_event("carga_undo", f"Carga revertida: {deleted} piezas eliminadas.", {"series": imported_series})
 
             # Remove from history
             self.app.app_state.history.remove(entry)

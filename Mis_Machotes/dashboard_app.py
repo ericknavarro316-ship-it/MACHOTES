@@ -409,9 +409,36 @@ class ZeldaApp(ctk.CTk):
         messagebox.showinfo("Carpeta de salida", f"Ubicación actual:\n\n{output_dir.resolve()}")
 
     def on_close(self):
+        self._perform_auto_backup()
         self.app_state.save_config()
         self.app_state.save_history()
         self.destroy()
+
+    def _perform_auto_backup(self):
+        auto_backup = self.app_state.config.get("auto_backup_enabled", "False")
+        backup_path = self.app_state.config.get("auto_backup_path", "").strip()
+
+        if auto_backup == "True" and backup_path:
+            import shutil
+            from datetime import datetime
+            from core.config import PATH_INVENTARIO
+
+            target_dir = Path(backup_path)
+            if target_dir.exists() and target_dir.is_dir():
+                try:
+                    db_path = Path(PATH_INVENTARIO).resolve()
+                    if db_path.exists():
+                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                        target_file = target_dir / f"inventory_backup_{timestamp}.db"
+                        shutil.copy2(db_path, target_file)
+
+                        # Keep only last 10 backups in that folder to save space
+                        backups = sorted(target_dir.glob("inventory_backup_*.db"), key=lambda p: p.stat().st_mtime, reverse=True)
+                        if len(backups) > 10:
+                            for old_backup in backups[10:]:
+                                old_backup.unlink(missing_ok=True)
+                except Exception as e:
+                    self.log(f"Error realizando auto-respaldo: {e}")
 
 
 if __name__ == "__main__":

@@ -169,7 +169,7 @@ class XMLView(BaseView):
         from database import db_manager
         try:
             deleted = db_manager.undo_xml_import(series_actualizadas)
-            self.app.app_state.record_event("xml_undo", f"Conciliación revertida: {deleted} UUIDs eliminados.")
+            self.app.app_state.record_event("xml_undo", f"Conciliación revertida: {deleted} UUIDs eliminados.", {"series": series_actualizadas})
 
             # Remove from history
             self.app.app_state.history.remove(entry)
