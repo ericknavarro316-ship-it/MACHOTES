@@ -135,13 +135,36 @@ def load_data():
         
     if os.path.exists(config.PATH_PRECIOS):
         df_precios = pd.read_excel(config.PATH_PRECIOS, sheet_name='Para imprimir', header=2)
-        df_precios = df_precios[['CLAVE SAT', 'DESCRIPCION', 'MODELO', 'D1']]
+
+        # Determine configured price column
+        import json
+        price_col = 'D1'
+        try:
+            config_path = os.path.join(config.APP_DATA_DIR, "config.json")
+            if os.path.exists(config_path):
+                with open(config_path, "r", encoding="utf-8") as f:
+                    config_data = json.load(f)
+                    price_col = config_data.get("price_column", "D1")
+        except:
+            pass
+
+        if price_col not in df_precios.columns:
+            print(f"ADVERTENCIA: La columna de precio '{price_col}' no existe en el Excel. Intentando usar 'D1'.")
+            if 'D1' in df_precios.columns:
+                price_col = 'D1'
+            else:
+                df_precios[price_col] = 0.0
+
+        df_precios = df_precios[['CLAVE SAT', 'DESCRIPCION', 'MODELO', price_col]]
+        # Rename to a standard internal name 'PRICE_VAL' to avoid downstream errors
+        df_precios = df_precios.rename(columns={price_col: 'PRICE_VAL'})
+
         df_precios.dropna(subset=['MODELO'], inplace=True)
         df_precios['MODELO'] = df_precios['MODELO'].astype(str).str.strip().str.upper()
         df_precios['CLAVE SAT'] = df_precios['CLAVE SAT'].fillna(0).astype(int).astype(str)
     else:
         print(f"Advertencia: Archivo de precios '{config.PATH_PRECIOS}' no encontrado. Precios serán $0.")
-        df_precios = pd.DataFrame(columns=['CLAVE SAT', 'DESCRIPCION', 'MODELO', 'D1'])
+        df_precios = pd.DataFrame(columns=['CLAVE SAT', 'DESCRIPCION', 'MODELO', 'PRICE_VAL'])
     
     return df_reporte, df_usados, df_xml, df_precios
 
@@ -168,7 +191,7 @@ def procesar_inventario(df_reporte, df_precios, incluir_infantiles=False, inclui
         if modelo_busqueda in df_precios_dict:
             datos_precio = df_precios_dict[modelo_busqueda]
             try:
-                d1_val = float(datos_precio['D1'])
+                d1_val = float(datos_precio['PRICE_VAL'])
             except (ValueError, TypeError):
                 d1_val = None
             if pd.notna(d1_val):
@@ -592,7 +615,7 @@ def cargar_inventario(ruta_pdf, path_inventario, lista_articulos=None):
         if modelo_busqueda in df_precios_dict:
             datos_precio = df_precios_dict[modelo_busqueda]
             try:
-                d1_val = float(datos_precio['D1'])
+                d1_val = float(datos_precio['PRICE_VAL'])
             except (ValueError, TypeError):
                 d1_val = None
             clave_sat = str(datos_precio['CLAVE SAT'])

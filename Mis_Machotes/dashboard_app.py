@@ -86,6 +86,22 @@ class ZeldaApp(ctk.CTk):
         self.refresh_data(force=True)
         self.show_view("dashboard")
 
+        # Start smart assistant watcher
+        self.after(5000, self._xml_watcher_tick)
+        self.after(2000, self._check_zero_prices)
+
+    def _check_zero_prices(self):
+        inventory = self.get_inventory_data(refresh=False)
+        if inventory and inventory.get("reporte") is not None:
+            df = inventory["reporte"]
+            if not df.empty and "TOTAL" in df.columns:
+                zero_prices = df[pd.to_numeric(df["TOTAL"], errors='coerce').fillna(0) <= 0]
+                if not zero_prices.empty:
+                    from tkinter import messagebox
+                    count = len(zero_prices)
+                    self.log(f"Asistente: Detectadas {count} piezas en DISPONIBLES con precio $0.00.")
+                    messagebox.showwarning("Asistente Inteligente: Precios en $0.00", f"Se detectaron {count} artículos disponibles que no tienen un precio asignado.\n\nEs posible que falte registrar el modelo en la lista de Excel o hayas escrito mal el nombre de la columna de precio en la configuración.")
+
 
     def apply_runtime_config(self):
         # Apply configurations to core/config.py
@@ -407,6 +423,62 @@ class ZeldaApp(ctk.CTk):
         output_dir.mkdir(exist_ok=True)
         self.log(f"Carpeta de salida lista en {output_dir}")
         messagebox.showinfo("Carpeta de salida", f"Ubicación actual:\n\n{output_dir.resolve()}")
+
+    def _xml_watcher_tick(self):
+        watcher_path = self.app_state.config.get("xml_watcher_path", "").strip()
+        if watcher_path:
+            import glob
+            import os
+            try:
+                xml_files = glob.glob(os.path.join(watcher_path, "*.xml"))
+                if xml_files:
+                    self.log(f"Asistente: Detectados {len(xml_files)} XMLs nuevos en la carpeta vigilada. Procesando...")
+                    self.run_in_thread(lambda: self._process_watched_xmls(watcher_path))
+            except Exception as e:
+                self.log(f"Error en watcher XML: {e}")
+
+        # Check again in 30 seconds
+        self.after(30000, self._xml_watcher_tick)
+
+    def _process_watched_xmls(self, watcher_path):
+        try:
+            output_path, series_actualizadas = mg.validar_xml_y_reemplazar(watcher_path)
+
+            # Move processed files to a subfolder so they aren't processed again
+            import os, shutil
+            processed_dir = os.path.join(watcher_path, "procesados")
+            os.makedirs(processed_dir, exist_ok=True)
+            import glob
+            for xml_file in glob.glob(os.path.join(watcher_path, "*.xml")):
+                try:
+                    shutil.move(xml_file, os.path.join(processed_dir, os.path.basename(xml_file)))
+                except Exception as move_err:
+                    self.log(f"Asistente: No se pudo mover {xml_file}: {move_err}")
+
+            self.after(0, lambda: self._on_watched_xml_success(watcher_path, output_path, series_actualizadas))
+        except Exception as e:
+            self.after(0, lambda: self.log(f"Asistente: Error procesando XMLs automáticamente: {e}"))
+
+    def _on_watched_xml_success(self, folder, output_path, series_actualizadas):
+        if series_actualizadas:
+            self.app_state.record_event("xml", "UUIDs conciliados automáticamente", {
+                "carpeta": folder,
+                "inventario": output_path,
+                "series_actualizadas": series_actualizadas
+            })
+            self.refresh_data(force=True)
+            try:
+                from plyer import notification
+                app_name = self.app_state.config.get("logo_text", "MACHOTES OF TIME")
+                notification.notify(
+                    title=app_name,
+                    message=f"Asistente: Auto-conciliación de XML completada ({len(series_actualizadas)} piezas).",
+                    app_name=app_name,
+                    timeout=5
+                )
+            except Exception as e:
+                self.log(f"Asistente: Notificación fallida: {e}")
+            self.log(f"Asistente: XMLs auto-conciliados exitosamente ({len(series_actualizadas)} UUIDs).")
 
     def on_close(self):
         self._perform_auto_backup()

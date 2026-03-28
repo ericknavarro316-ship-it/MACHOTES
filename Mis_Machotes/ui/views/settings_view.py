@@ -103,8 +103,35 @@ class SettingsView(BaseView):
 
         ctk.CTkButton(path_frame, text="Examinar...", width=80, fg_color=CURRENT_THEME["panel"], hover_color=CURRENT_THEME["gold_hover"], command=self._select_backup_folder).grid(row=1, column=1, sticky="e")
 
+        # Smart Assistant Configuration
+        self.assistant_frame = ctk.CTkFrame(card, fg_color=CURRENT_THEME["panel_alt"], corner_radius=8)
+        self.assistant_frame.grid(row=len(fields) + 3, column=0, sticky="ew", padx=8, pady=12)
+        self.assistant_frame.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(self.assistant_frame, text="Asistente Inteligente", text_color=CURRENT_THEME["gold"], font=ctk.CTkFont(weight="bold")).grid(row=0, column=0, columnspan=2, sticky="w", padx=10, pady=(10, 5))
+
+        watcher_frame = ctk.CTkFrame(self.assistant_frame, fg_color="transparent")
+        watcher_frame.grid(row=1, column=0, columnspan=2, sticky="ew", padx=10, pady=(0, 10))
+        watcher_frame.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(watcher_frame, text="Carpeta Monitoreo XML (Auto-Conciliación):", text_color=CURRENT_THEME["muted"], font=ctk.CTkFont(size=11)).grid(row=0, column=0, sticky="w")
+        self.xml_watcher_entry = ctk.CTkEntry(watcher_frame, height=28)
+        self.xml_watcher_entry.grid(row=1, column=0, sticky="ew", pady=(2, 0), padx=(0, 10))
+        self.xml_watcher_entry.insert(0, str(self.app.app_state.config.get("xml_watcher_path", "")))
+
+        ctk.CTkButton(watcher_frame, text="Examinar...", width=80, fg_color=CURRENT_THEME["panel"], hover_color=CURRENT_THEME["gold_hover"], command=self._select_watcher_folder).grid(row=1, column=1, sticky="e")
+
+        price_col_frame = ctk.CTkFrame(self.assistant_frame, fg_color="transparent")
+        price_col_frame.grid(row=2, column=0, columnspan=2, sticky="ew", padx=10, pady=(0, 10))
+        price_col_frame.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(price_col_frame, text="Columna de Precio (en Excel de Precios):", text_color=CURRENT_THEME["muted"], font=ctk.CTkFont(size=11)).grid(row=0, column=0, sticky="w")
+        self.price_col_entry = ctk.CTkEntry(price_col_frame, height=28, placeholder_text="D1, D2, MAYOREO...")
+        self.price_col_entry.grid(row=1, column=0, sticky="ew", pady=(2, 0), padx=(0, 10))
+        self.price_col_entry.insert(0, str(self.app.app_state.config.get("price_column", "D1")))
+
         buttons_frame = ctk.CTkFrame(card, fg_color="transparent")
-        buttons_frame.grid(row=len(fields) + 3, column=0, sticky="ew", padx=8, pady=(8, 16))
+        buttons_frame.grid(row=len(fields) + 4, column=0, sticky="ew", padx=8, pady=(8, 16))
 
         ctk.CTkButton(buttons_frame, text="Guardar ajustes", fg_color=CURRENT_THEME["forest"], hover_color=CURRENT_THEME["forest_hover"], command=self.save).pack(side="left", padx=(0, 20))
 
@@ -117,6 +144,13 @@ class SettingsView(BaseView):
         if folder:
             self.backup_path_entry.delete(0, "end")
             self.backup_path_entry.insert(0, folder)
+
+    def _select_watcher_folder(self):
+        from tkinter import filedialog
+        folder = filedialog.askdirectory(title="Seleccionar Carpeta Monitoreo XML")
+        if folder:
+            self.xml_watcher_entry.delete(0, "end")
+            self.xml_watcher_entry.insert(0, folder)
 
     def wipe_database(self):
         confirm1 = messagebox.askyesno(
@@ -280,6 +314,10 @@ class SettingsView(BaseView):
         # Save backup settings
         self.app.app_state.config["auto_backup_enabled"] = self.auto_backup_var.get()
         self.app.app_state.config["auto_backup_path"] = self.backup_path_entry.get().strip()
+
+        # Save smart assistant settings
+        self.app.app_state.config["xml_watcher_path"] = self.xml_watcher_entry.get().strip()
+        self.app.app_state.config["price_column"] = self.price_col_entry.get().strip() or "D1"
 
         self.app.app_state.save_config()
         self.app.apply_runtime_config()
