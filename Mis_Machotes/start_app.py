@@ -137,6 +137,11 @@ def collect_check_results():
 
 
 def perform_checks(splash):
+    if getattr(sys, 'frozen', False):
+        # Skip raw file text parsing and dependency checking if we are already compiled as an executable
+        splash.after(1500, lambda: launch_app(splash))
+        return
+
     try:
         missing, missing_files, missing_snippets = collect_check_results()
     except Exception as e:
@@ -170,7 +175,12 @@ def launch_app(splash):
     os.chdir(BASE_DIR)
 
     try:
-        runpy.run_path(str(BASE_DIR / "dashboard_app.py"), run_name="__main__")
+        if getattr(sys, 'frozen', False):
+            import dashboard_app
+            app = dashboard_app.ZeldaApp()
+            app.mainloop()
+        else:
+            runpy.run_path(str(BASE_DIR / "dashboard_app.py"), run_name="__main__")
     except Exception as e:
         show_error_and_exit("Error Crítico", f"La app se cerró por un error:\n\n{traceback.format_exc()}")
 
