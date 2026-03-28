@@ -121,6 +121,17 @@ class SettingsView(BaseView):
 
         ctk.CTkButton(watcher_frame, text="Examinar...", width=80, fg_color=CURRENT_THEME["panel"], hover_color=CURRENT_THEME["gold_hover"], command=self._select_watcher_folder).grid(row=1, column=1, sticky="e")
 
+        pdf_watcher_frame = ctk.CTkFrame(self.assistant_frame, fg_color="transparent")
+        pdf_watcher_frame.grid(row=2, column=0, columnspan=2, sticky="ew", padx=10, pady=(0, 10))
+        pdf_watcher_frame.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(pdf_watcher_frame, text="Carpeta Monitoreo PDF (Auto-Carga Inventario):", text_color=CURRENT_THEME["muted"], font=ctk.CTkFont(size=11)).grid(row=0, column=0, sticky="w")
+        self.pdf_watcher_entry = ctk.CTkEntry(pdf_watcher_frame, height=28)
+        self.pdf_watcher_entry.grid(row=1, column=0, sticky="ew", pady=(2, 0), padx=(0, 10))
+        self.pdf_watcher_entry.insert(0, str(self.app.app_state.config.get("pdf_watcher_path", "")))
+
+        ctk.CTkButton(pdf_watcher_frame, text="Examinar...", width=80, fg_color=CURRENT_THEME["panel"], hover_color=CURRENT_THEME["gold_hover"], command=self._select_pdf_watcher_folder).grid(row=1, column=1, sticky="e")
+
         price_col_frame = ctk.CTkFrame(self.assistant_frame, fg_color="transparent")
         price_col_frame.grid(row=2, column=0, columnspan=2, sticky="ew", padx=10, pady=(0, 10))
         price_col_frame.grid_columnconfigure(0, weight=1)
@@ -151,6 +162,13 @@ class SettingsView(BaseView):
         if folder:
             self.xml_watcher_entry.delete(0, "end")
             self.xml_watcher_entry.insert(0, folder)
+
+    def _select_pdf_watcher_folder(self):
+        from tkinter import filedialog
+        folder = filedialog.askdirectory(title="Seleccionar Carpeta Monitoreo PDF")
+        if folder:
+            self.pdf_watcher_entry.delete(0, "end")
+            self.pdf_watcher_entry.insert(0, folder)
 
     def wipe_database(self):
         confirm1 = messagebox.askyesno(
@@ -317,6 +335,7 @@ class SettingsView(BaseView):
 
         # Save smart assistant settings
         self.app.app_state.config["xml_watcher_path"] = self.xml_watcher_entry.get().strip()
+        self.app.app_state.config["pdf_watcher_path"] = self.pdf_watcher_entry.get().strip()
         self.app.app_state.config["price_column"] = self.price_col_entry.get().strip() or "D1"
 
         self.app.app_state.save_config()

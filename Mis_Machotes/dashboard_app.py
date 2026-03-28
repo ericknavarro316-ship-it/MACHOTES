@@ -88,6 +88,7 @@ class ZeldaApp(ctk.CTk):
 
         # Start smart assistant watcher
         self.after(5000, self._xml_watcher_tick)
+        self.after(8000, self._pdf_watcher_tick)
         self.after(2000, self._check_zero_prices)
 
     def _check_zero_prices(self):
@@ -479,6 +480,118 @@ class ZeldaApp(ctk.CTk):
             except Exception as e:
                 self.log(f"Asistente: Notificación fallida: {e}")
             self.log(f"Asistente: XMLs auto-conciliados exitosamente ({len(series_actualizadas)} UUIDs).")
+
+    def _pdf_watcher_tick(self):
+        watcher_path = self.app_state.config.get("pdf_watcher_path", "").strip()
+        if watcher_path:
+            import glob
+            import os
+            try:
+                pdf_files = glob.glob(os.path.join(watcher_path, "*.pdf"))
+                if pdf_files:
+                    self.log(f"Asistente: Detectados {len(pdf_files)} PDFs de mercancía nuevos. Procesando...")
+                    self.run_in_thread(lambda: self._process_watched_pdfs(watcher_path, pdf_files))
+            except Exception as e:
+                self.log(f"Error en watcher PDF: {e}")
+
+        # Check again in 30 seconds
+        self.after(30000, self._pdf_watcher_tick)
+
+    def _process_watched_pdfs(self, watcher_path, pdf_files):
+        import os, shutil
+        threshold = int(self.app_state.config.get("parse_warning_threshold", 3))
+
+        processed_dir = os.path.join(watcher_path, "procesados")
+        review_dir = os.path.join(watcher_path, "revision_manual")
+        os.makedirs(processed_dir, exist_ok=True)
+        os.makedirs(review_dir, exist_ok=True)
+
+        total_items_imported = 0
+        total_pdfs_imported = 0
+        pdfs_to_review = 0
+
+        for pdf_path in pdf_files:
+            try:
+                items, warnings, report = mg.extraer_nuevos_articulos(pdf_path, with_report=True)
+
+                # Check warnings threshold
+                if len(warnings) >= threshold:
+                    self.log(f"Asistente: PDF '{os.path.basename(pdf_path)}' movido a revisión manual por exceder umbral de warnings ({len(warnings)}).")
+                    shutil.move(pdf_path, os.path.join(review_dir, os.path.basename(pdf_path)))
+                    pdfs_to_review += 1
+                    continue
+
+                # Deduplicate
+                dedup = {}
+                for item in items:
+                    item["_source_pdf"] = os.path.basename(pdf_path)
+                    serie = str(item.get("No de SERIE:", "")).strip()
+                    if serie and serie not in dedup:
+                        dedup[serie] = item
+                unique_items = list(dedup.values())
+
+                if not unique_items:
+                    self.log(f"Asistente: PDF '{os.path.basename(pdf_path)}' no contiene artículos válidos. Movido a procesados.")
+                    shutil.move(pdf_path, os.path.join(processed_dir, os.path.basename(pdf_path)))
+                    continue
+
+                # Cross-check with DB to avoid duplicating already existing
+                inventory = self.get_inventory_data(refresh=False)
+                existentes = set()
+                if inventory:
+                    for key in ("reporte", "usados", "xml"):
+                        df = inventory.get(key)
+                        if df is not None and not df.empty and "No de SERIE:" in df.columns:
+                            existentes.update(df["No de SERIE:"].astype(str).str.strip().tolist())
+
+                new_items = [it for it in unique_items if str(it.get("No de SERIE:", "")).strip() not in existentes]
+
+                if new_items:
+                    output_path = mg.cargar_inventario_y_reemplazar(pdf_path, lista_articulos=new_items)
+                    series_importadas = [str(item.get("No de SERIE:", "")) for item in new_items]
+                    self.app_state.record_event(
+                        "carga",
+                        f"Mercancía importada auto ({len(new_items)} piezas)",
+                        {"pdfs": [pdf_path], "inventario": output_path, "series_importadas": series_importadas},
+                    )
+                    total_items_imported += len(new_items)
+                    total_pdfs_imported += 1
+
+                shutil.move(pdf_path, os.path.join(processed_dir, os.path.basename(pdf_path)))
+
+            except Exception as e:
+                self.log(f"Asistente: Error procesando '{os.path.basename(pdf_path)}': {e}")
+                try:
+                    shutil.move(pdf_path, os.path.join(review_dir, os.path.basename(pdf_path)))
+                    pdfs_to_review += 1
+                except:
+                    pass
+
+        self.after(0, lambda: self._on_watched_pdf_success(total_items_imported, total_pdfs_imported, pdfs_to_review))
+
+    def _on_watched_pdf_success(self, items_imported, pdfs_imported, pdfs_to_review):
+        if items_imported > 0 or pdfs_to_review > 0:
+            self.refresh_data(force=True)
+            try:
+                from plyer import notification
+                app_name = self.app_state.config.get("logo_text", "MACHOTES OF TIME")
+
+                if items_imported > 0 and pdfs_to_review == 0:
+                    msg = f"Asistente: Auto-carga completada. {items_imported} artículos nuevos de {pdfs_imported} PDF(s)."
+                elif items_imported > 0 and pdfs_to_review > 0:
+                    msg = f"Asistente: {items_imported} artículos cargados. {pdfs_to_review} PDF(s) requieren revisión manual."
+                else:
+                    msg = f"Asistente: {pdfs_to_review} PDF(s) requieren revisión manual (exceden warnings)."
+
+                notification.notify(
+                    title=app_name,
+                    message=msg,
+                    app_name=app_name,
+                    timeout=5
+                )
+            except Exception as e:
+                self.log(f"Asistente: Notificación fallida: {e}")
+            self.log(f"Asistente: Auto-carga PDF finalizada. Artículos: {items_imported}, A revisión: {pdfs_to_review}.")
 
     def on_close(self):
         self._perform_auto_backup()
