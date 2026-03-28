@@ -163,9 +163,30 @@ class SettingsView(BaseView):
             img = Image.open(file_path)
             # Resize image if it's too large to save space (e.g., max 500x500)
             img.thumbnail((500, 500))
-            # Convert to RGBA so it supports transparency if saving as PNG
-            if img.mode != 'RGBA':
+
+            # Check for dark logos with transparency
+            if img.mode in ('RGBA', 'LA') or (img.mode == 'P' and 'transparency' in img.info):
                 img = img.convert('RGBA')
+                # Analyze brightness of non-transparent pixels
+                pixels = list(img.getdata())
+                dark_pixels = 0
+                visible_pixels = 0
+                for r, g, b, a in pixels:
+                    if a > 50:
+                        visible_pixels += 1
+                        # Fast brightness calculation
+                        brightness = (r * 299 + g * 587 + b * 114) / 1000
+                        if brightness < 80:
+                            dark_pixels += 1
+
+                # If image is mostly transparent and very dark, add a white background
+                if visible_pixels > 0 and (dark_pixels / visible_pixels) > 0.6:
+                    bg = Image.new('RGBA', img.size, (255, 255, 255, 255))
+                    bg.paste(img, (0, 0), img)
+                    img = bg
+            elif img.mode != 'RGBA':
+                img = img.convert('RGBA')
+
             img.save(dest_path, "PNG")
 
             if colors:
