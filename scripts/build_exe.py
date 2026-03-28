@@ -21,6 +21,22 @@ def main():
         print(f"Error: No se pudo encontrar el directorio del proyecto en {project_dir}")
         sys.exit(1)
 
+    # Windows MAX_PATH limit check
+    if len(str(project_dir)) > 100:
+        print("\n==================================================")
+        print("                 ⚠️ ADVERTENCIA ⚠️                  ")
+        print("==================================================")
+        print("La ruta actual donde guardaste la aplicacion es DEMASIADO LARGA:")
+        print(f"Ruta: {project_dir}")
+        print("\nWindows tiene un limite estricto de caracteres para los nombres de archivo (MAX_PATH).")
+        print("PyInstaller fallará (FileNotFoundError) al intentar crear las carpetas internas.")
+        print("\nSOLUCIÓN: Mueve la carpeta completa del proyecto a una ruta más corta, por ejemplo:")
+        print("C:\\MACHOTES")
+        print("Y vuelve a intentar correr este script desde ahí.")
+        print("==================================================\n")
+
+        sys.exit(1)
+
     os.chdir(project_dir)
 
     # PyInstaller options
