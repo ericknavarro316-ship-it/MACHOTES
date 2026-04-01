@@ -166,6 +166,18 @@ class TreeBundle:
     def place(self, *args, **kwargs):
         return self._frame.place(*args, **kwargs)
 
+class RedirectText:
+    """Clase para redirigir stdout y stderr a un widget Text de Tkinter."""
+    def __init__(self, textbox):
+        self.textbox = textbox
+
+    def write(self, string):
+        self.textbox.insert("end", string)
+        self.textbox.see("end")
+
+    def flush(self):
+        return None
+
 class BaseView(ctk.CTkFrame):
     title = ""
     subtitle = ""

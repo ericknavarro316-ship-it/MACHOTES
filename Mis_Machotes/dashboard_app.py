@@ -3,6 +3,7 @@ import sys
 import threading
 from datetime import datetime
 from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import customtkinter as ctk
 import tkinter as tk
@@ -11,7 +12,7 @@ from tkinter import messagebox, ttk
 import machote_generator as mg
 from core.state import AppState
 import core.config as config
-from ui.components import TreeBundle, CURRENT_THEME, update_theme_colors
+from ui.components import TreeBundle, CURRENT_THEME, update_theme_colors, RedirectText
 from ui.views.dashboard_view import DashboardView
 from ui.views.inventory_view import InventoryView
 from ui.views.generator_view import GeneratorView
@@ -27,17 +28,6 @@ os.chdir(BASE_DIR)
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
 
-
-class RedirectText:
-    def __init__(self, textbox):
-        self.textbox = textbox
-
-    def write(self, string):
-        self.textbox.insert("end", string)
-        self.textbox.see("end")
-
-    def flush(self):
-        return None
 
 class ZeldaApp(ctk.CTk):
     def __init__(self):
@@ -83,18 +73,25 @@ class ZeldaApp(ctk.CTk):
         sys.stderr = RedirectText(self.log_text)
 
         self.apply_runtime_config()
-        self.refresh_data(force=True)
+        # Initialize loading overlay (hidden by default)
+        self.loading_overlay = ctk.CTkFrame(self, fg_color=CURRENT_THEME["bg"], bg_color=CURRENT_THEME["bg"])
+        self.loading_label = ctk.CTkLabel(self.loading_overlay, text="Cargando base de datos...", font=ctk.CTkFont(size=20, weight="bold"), text_color=CURRENT_THEME["gold"])
+        self.loading_label.place(relx=0.5, rely=0.5, anchor="center")
+
+        # Initial view loading
         self.show_view("dashboard")
+        # Start background load so UI doesn't freeze on start
+        self.refresh_data_async(force=True)
 
 
-    def apply_runtime_config(self):
+    def apply_runtime_config(self) -> None:
         # Apply configurations to core/config.py
         config.PATH_INVENTARIO = self.app_state.config.get("inventario_path", config.PATH_INVENTARIO)
         config.PATH_MACHOTE = self.app_state.config.get("machote_path", config.PATH_MACHOTE)
         config.PATH_PRECIOS = self.app_state.config.get("precios_path", config.PATH_PRECIOS)
         config.OUTPUT_DIR = self.app_state.config.get("output_dir", config.OUTPUT_DIR)
 
-    def style_treeview(self):
+    def style_treeview(self) -> None:
         style = ttk.Style()
         style.theme_use("default")
         style.configure(
@@ -115,7 +112,7 @@ class ZeldaApp(ctk.CTk):
         )
         style.map("Treeview", background=[("selected", CURRENT_THEME["forest"])])
 
-    def create_sidebar(self):
+    def create_sidebar(self) -> None:
         self.sidebar_collapsed = False
         self.sidebar = ctk.CTkFrame(self, width=270, fg_color=CURRENT_THEME["panel"], corner_radius=0, border_width=1, border_color=CURRENT_THEME["gold"])
         self.sidebar.grid(row=0, column=0, rowspan=2, sticky="nsew")
@@ -148,7 +145,7 @@ class ZeldaApp(ctk.CTk):
         self.logo_label.grid(row=0, column=0, sticky="w")
         self.sidebar_toggle_btn = ctk.CTkButton(
             self.sidebar_header,
-            text="▲",
+            text="☰",
             width=42,
             fg_color=CURRENT_THEME["panel_alt"],
             hover_color=CURRENT_THEME["gold_hover"],
@@ -157,7 +154,7 @@ class ZeldaApp(ctk.CTk):
         self.sidebar_toggle_btn.grid(row=0, column=1, sticky="e", padx=(8, 0))
 
         subtitle_text = "Panel de control administrativo" if self.has_custom_logo else "Panel inspirado en Ocarina of Time"
-        self.sidebar_subtitle = ctk.CTkLabel(self.sidebar, text=subtitle_text, text_color=CURRENT_THEME["text"], font=ctk.CTkFont(size=12))
+        self.sidebar_subtitle = ctk.CTkLabel(self.sidebar, text=subtitle_text, text_color=CURRENT_THEME["text"], font=ctk.CTkFont(size=12, slant="italic"))
         self.sidebar_subtitle.grid(row=1, column=0, sticky="w", padx=20, pady=(0, 20))
 
         self.nav_buttons = {}
@@ -181,10 +178,10 @@ class ZeldaApp(ctk.CTk):
         self.quick = ctk.CTkFrame(self.sidebar, fg_color=CURRENT_THEME["panel_alt"], corner_radius=16, border_width=1, border_color=CURRENT_THEME["gold"])
         self.quick.grid(row=10, column=0, sticky="ew", padx=18, pady=18)
         ctk.CTkLabel(self.quick, text="Atajos del Héroe", text_color=CURRENT_THEME["gold"], font=ctk.CTkFont(size=15, weight="bold")).pack(anchor="w", padx=14, pady=(12, 4))
-        ctk.CTkButton(self.quick, text="Recargar datos", fg_color=CURRENT_THEME["gold"], hover_color=CURRENT_THEME["gold_hover"], text_color="#221A0C", command=lambda: self.refresh_data(force=True)).pack(fill="x", padx=12, pady=6)
+        ctk.CTkButton(self.quick, text="Recargar datos", fg_color=CURRENT_THEME["gold"], hover_color=CURRENT_THEME["gold_hover"], text_color="#221A0C", command=lambda: self.refresh_data_async(force=True)).pack(fill="x", padx=12, pady=6)
         ctk.CTkButton(self.quick, text="Abrir carpeta salida", fg_color=CURRENT_THEME["forest"], hover_color=CURRENT_THEME["forest_hover"], text_color=CURRENT_THEME["text"], command=self.open_output_folder).pack(fill="x", padx=12, pady=(0, 12))
 
-    def toggle_sidebar(self):
+    def toggle_sidebar(self) -> None:
         self.sidebar_collapsed = not self.sidebar_collapsed
         if self.sidebar_collapsed:
             self.sidebar.configure(width=82)
@@ -194,7 +191,7 @@ class ZeldaApp(ctk.CTk):
                 self.logo_label.configure(text="△")
             self.sidebar_subtitle.grid_remove()
             self.quick.grid_remove()
-            self.sidebar_toggle_btn.configure(text="👁")
+            self.sidebar_toggle_btn.configure(text="►")
             for key, btn in self.nav_buttons.items():
                 icon = self.nav_labels_full[key].split(" ")[0]
                 btn.configure(text=icon, anchor="center")
@@ -206,11 +203,11 @@ class ZeldaApp(ctk.CTk):
                 self.logo_label.configure(text=self.app_state.config.get("logo_text", "MACHOTES OF TIME"))
             self.sidebar_subtitle.grid()
             self.quick.grid()
-            self.sidebar_toggle_btn.configure(text="▲")
+            self.sidebar_toggle_btn.configure(text="☰")
             for key, btn in self.nav_buttons.items():
                 btn.configure(text=self.nav_labels_full[key], anchor="w")
 
-    def create_main_area(self):
+    def create_main_area(self) -> None:
         self.main_area = ctk.CTkFrame(self, fg_color="transparent")
         self.main_area.grid(row=0, column=1, sticky="nsew")
         self.main_area.grid_rowconfigure(0, weight=1)
@@ -228,7 +225,7 @@ class ZeldaApp(ctk.CTk):
         }
         self.history_view = self.views["history"]
 
-    def create_log_panel(self):
+    def create_log_panel(self) -> None:
         self.log_collapsed = False
         self.log_frame = ctk.CTkFrame(self, fg_color=CURRENT_THEME["panel"], corner_radius=0, border_width=1, border_color=CURRENT_THEME["gold"])
         self.log_frame.grid(row=1, column=1, sticky="nsew")
@@ -268,7 +265,7 @@ class ZeldaApp(ctk.CTk):
         self.log_text.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 12))
         self.log("Santuario inicializado. Bienvenido al reino de los machotes.")
 
-    def toggle_log_panel(self):
+    def toggle_log_panel(self) -> None:
         self.log_collapsed = not self.log_collapsed
         if self.log_collapsed:
             self.log_text.grid_remove()
@@ -279,7 +276,7 @@ class ZeldaApp(ctk.CTk):
             self.log_text.grid()
             self.log_toggle_btn.configure(text="◣")
 
-    def create_treeview(self, parent, columns):
+    def create_treeview(self, parent: ctk.CTkFrame, columns: List[Tuple[str, str, int]]) -> TreeBundle:
         frame = ctk.CTkFrame(parent, fg_color="transparent")
         frame.grid_rowconfigure(0, weight=1)
         frame.grid_columnconfigure(0, weight=1)
@@ -295,7 +292,7 @@ class ZeldaApp(ctk.CTk):
         tree.configure(yscrollcommand=y_scroll.set, xscrollcommand=x_scroll.set)
         return TreeBundle(frame, tree)
 
-    def money(self, value):
+    def money(self, value: Union[str, float, int]) -> str:
         import math
         try:
             val = float(value)
@@ -305,16 +302,16 @@ class ZeldaApp(ctk.CTk):
         except Exception:
             return "$0.00"
 
-    def log(self, message):
+    def log(self, message: str) -> None:
         timestamp = datetime.now().strftime("%H:%M:%S")
         self.log_text.insert("end", f"[{timestamp}] {message}\n")
         self.log_text.see("end")
 
-    def run_in_thread(self, callback):
+    def run_in_thread(self, callback: Callable) -> None:
         thread = threading.Thread(target=callback, daemon=True)
         thread.start()
 
-    def get_inventory_data(self, refresh=False):
+    def get_inventory_data(self, refresh: bool = False) -> Optional[Dict[str, Any]]:
         if self.app_state.inventory_cache is None or refresh:
             try:
                 df_reporte, df_usados, df_xml, df_precios = mg.load_data()
@@ -330,9 +327,22 @@ class ZeldaApp(ctk.CTk):
                 return None
         return self.app_state.inventory_cache
 
-    def refresh_data(self, force=False):
-        self.app_state.inventory_cache = None if force else self.app_state.inventory_cache
-        inventory = self.get_inventory_data(refresh=force)
+    def refresh_data_async(self, force: bool = False) -> None:
+        """Reloads the inventory data asynchronously so the UI doesn't freeze."""
+        self.loading_overlay.place(relx=0, rely=0, relwidth=1, relheight=1)
+        self.loading_overlay.tkraise()
+        self.update_idletasks()
+
+        def background_load():
+            self.app_state.inventory_cache = None if force else self.app_state.inventory_cache
+            inventory = self.get_inventory_data(refresh=force)
+            self.after(0, lambda: self._on_data_refreshed(inventory))
+
+        self.run_in_thread(background_load)
+
+    def _on_data_refreshed(self, inventory: Optional[Dict[str, Any]]) -> None:
+        """Called safely on the main thread after data has been loaded."""
+        self.loading_overlay.place_forget()
         if not inventory:
             return
         self.views["dashboard"].refresh()
@@ -340,7 +350,7 @@ class ZeldaApp(ctk.CTk):
         self.views["history"].refresh()
         self.log("Datos del reino actualizados.")
 
-    def show_view(self, key):
+    def show_view(self, key: str) -> None:
         for view in self.views.values():
             view.grid_forget()
         self.views[key].grid(row=0, column=0, sticky="nsew")
@@ -350,7 +360,7 @@ class ZeldaApp(ctk.CTk):
         if hasattr(self.views[key], "refresh"):
             self.views[key].refresh()
 
-    def perform_global_search(self, event=None):
+    def perform_global_search(self, event: Any = None) -> None:
         term = self.global_search_var.get().strip().lower()
         if not term:
             return
@@ -402,13 +412,13 @@ class ZeldaApp(ctk.CTk):
         self.global_search_var.set("")
         self.log(f"Búsqueda global: {len(found)} resultados para '{term}'.")
 
-    def open_output_folder(self):
+    def open_output_folder(self) -> None:
         output_dir = Path(self.app_state.config.get("output_dir", config.OUTPUT_DIR))
         output_dir.mkdir(exist_ok=True)
         self.log(f"Carpeta de salida lista en {output_dir}")
         messagebox.showinfo("Carpeta de salida", f"Ubicación actual:\n\n{output_dir.resolve()}")
 
-    def on_close(self):
+    def on_close(self) -> None:
         self.app_state.save_config()
         self.app_state.save_history()
         self.destroy()

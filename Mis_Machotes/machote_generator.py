@@ -3,6 +3,7 @@ import re
 import fitz
 import glob
 import pandas as pd
+import numpy as np
 import openpyxl
 from copy import copy
 from openpyxl.styles import Font, Border, Side, PatternFill, Alignment, Protection
@@ -15,10 +16,11 @@ from datetime import datetime
 import random
 import shutil
 import defusedxml.ElementTree as ET
+from typing import Tuple, List, Dict, Optional, Any
 import core.config as config
 from database import db_manager
 
-def _es_token_color(token):
+def _es_token_color(token: Any) -> bool:
     if not token:
         return False
     normalizado = str(token).strip().upper().replace("-", "/")
@@ -28,14 +30,14 @@ def _es_token_color(token):
     return all(parte in config.COLORES_VALIDOS for parte in partes)
 
 
-def extraer_datos_empresa(empresa_busqueda):
-    def _norm(texto):
+def extraer_datos_empresa(empresa_busqueda: str) -> Tuple[Optional[str], Optional[str]]:
+    def _norm(texto: Any) -> str:
         txt = unicodedata.normalize("NFKD", str(texto or ""))
         txt = "".join(ch for ch in txt if not unicodedata.combining(ch))
         txt = re.sub(r"[^a-zA-Z0-9]+", " ", txt).strip().lower()
         return txt
 
-    def _puntaje_coincidencia(nombre_empresa, nombre_archivo):
+    def _puntaje_coincidencia(nombre_empresa: str, nombre_archivo: str) -> float:
         tokens_emp = [t for t in _norm(nombre_empresa).split() if len(t) > 2]
         if not tokens_emp:
             return 0
@@ -105,7 +107,7 @@ def extraer_datos_empresa(empresa_busqueda):
     return rfc, razon_social
 
 
-def obtener_empresas_csf():
+def obtener_empresas_csf() -> List[str]:
     archivos_pdf = glob.glob(os.path.join("machotes", "*CSF*.pdf"))
     empresas = []
     for path in archivos_pdf:
@@ -120,7 +122,7 @@ def obtener_empresas_csf():
 
 
 
-def load_data():
+def load_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     if not db_manager.is_db_initialized():
         print("Base de datos SQLite no inicializada. Intentando migrar desde Excel...")
         if os.path.exists(config.PATH_INVENTARIO):
@@ -145,46 +147,71 @@ def load_data():
     
     return df_reporte, df_usados, df_xml, df_precios
 
-def aplicar_mapeo(modelo_base):
+def aplicar_mapeo(modelo_base: str) -> str:
     if pd.isna(modelo_base):
         return modelo_base
     modelo_upper = str(modelo_base).strip().upper()
     return config.MAPEOS_MODELOS.get(modelo_upper, modelo_upper)
 
-def procesar_inventario(df_reporte, df_precios, incluir_infantiles=False, incluir_motobicis=False, categoria="TODAS", modelos=None, sucursales=None):
+def procesar_inventario(
+    df_reporte: pd.DataFrame,
+    df_precios: pd.DataFrame,
+    incluir_infantiles: bool = False,
+    incluir_motobicis: bool = False,
+    categoria: str = "TODAS",
+    modelos: list = None,
+    sucursales: list = None
+) -> pd.DataFrame:
     df = df_reporte.copy()
     df['CLAVE SAT'] = df['CLAVE SAT'].astype(str)
     
+    # 1. Filtro inicial optimizado
     if not incluir_motobicis:
-        df = df[~df['DESCRIPCION'].astype(str).str.contains("MOTOCICLETA ELECTRICA", case=False, na=False)]
+        mask = ~df['DESCRIPCION'].astype(str).str.contains("MOTOCICLETA ELECTRICA", case=False, na=False)
+        df = df[mask]
         
-    df['MODELO_MAPPED'] = df['MODELO BASE'].apply(aplicar_mapeo)
-    df_precios_dict = df_precios.drop_duplicates(subset=['MODELO'], keep='last').set_index('MODELO').to_dict('index')
+    # 2. Mapeo vectorizado usando replace y map
+    # Creamos un diccionario de mapeo a partir de los datos únicos para evitar iterar uno por uno
+    modelos_unicos = df['MODELO BASE'].dropna().unique()
+    mapa_modelos = {m: aplicar_mapeo(m) for m in modelos_unicos}
+    df['MODELO_MAPPED'] = df['MODELO BASE'].map(mapa_modelos).fillna(df['MODELO BASE'])
     
-    col_idx = {col: i + 1 for i, col in enumerate(df.columns)}
-    for row in df.itertuples(name=None):
-        idx = row[0]
-        modelo_busqueda = row[col_idx['MODELO_MAPPED']]
-        if modelo_busqueda in df_precios_dict:
-            datos_precio = df_precios_dict[modelo_busqueda]
-            try:
-                d1_val = float(datos_precio['D1'])
-            except (ValueError, TypeError):
-                d1_val = None
-            if pd.notna(d1_val):
-                df.at[idx, 'D1'] = d1_val
-            df.at[idx, 'CLAVE SAT'] = str(datos_precio['CLAVE SAT'])
+    # Preparar df_precios
+    df_precios_unicos = df_precios.drop_duplicates(subset=['MODELO'], keep='last').set_index('MODELO')
+
+    # 3. Join (merge) en lugar de iterar row por row
+    # Hacemos un merge left para traer 'D1', 'CLAVE SAT' y 'DESCRIPCION' desde df_precios
+    df = df.merge(
+        df_precios_unicos[['D1', 'CLAVE SAT', 'DESCRIPCION']],
+        left_on='MODELO_MAPPED',
+        right_index=True,
+        how='left',
+        suffixes=('', '_precio')
+    )
+
+    # Actualizar valores si se encontraron en la tabla de precios
+    mask_found = df['D1_precio'].notna()
+    df.loc[mask_found, 'D1'] = pd.to_numeric(df.loc[mask_found, 'D1_precio'], errors='coerce')
+    df.loc[mask_found, 'CLAVE SAT'] = df.loc[mask_found, 'CLAVE SAT_precio'].astype(str)
+
+    # Construir descripción vectorizada
+    desc_base = df['DESCRIPCION_precio'].astype(str).str.strip().fillna('')
+    modelo = df['MODELO_MAPPED'].astype(str).str.strip().fillna('')
+    color = df['COLOR'].astype(str).str.strip()
+    color = color.replace({'nan': '', 'None': ''})
+    serie = df['No de SERIE:'].astype(str).str.strip().fillna('')
+
+    # Vectorized string concatenation
+    color_part = np.where(color != "", " " + color, "")
+    desc_final = desc_base + " " + modelo + color_part + " NO DE SERIE:" + serie
+
+    # Aplicar nueva descripción solo a los que cruzaron
+    df.loc[mask_found, 'DESCRIPCION'] = desc_final[mask_found].str.upper()
+
+    # Limpiar columnas temporales del merge
+    df = df.drop(columns=['D1_precio', 'CLAVE SAT_precio', 'DESCRIPCION_precio'], errors='ignore')
             
-            desc_base = str(datos_precio['DESCRIPCION']).strip()
-            color_val = row[col_idx['COLOR']] if 'COLOR' in col_idx else ''
-            color = str(color_val).strip() if pd.notna(color_val) else ""
-            serie = str(row[col_idx['No de SERIE:']]).strip()
-            if color.lower() != 'nan' and color != "":
-                desc_final = f"{desc_base} {modelo_busqueda} {color} NO DE SERIE:{serie}"
-            else:
-                desc_final = f"{desc_base} {modelo_busqueda} NO DE SERIE:{serie}"
-            df.at[idx, 'DESCRIPCION'] = desc_final.upper()
-            
+    # 4. Filtros posteriores vectorizados
     if not incluir_infantiles:
         df = df[~df['DESCRIPCION'].astype(str).str.contains("INFANTIL ELECTRICO", case=False, na=False)]
         df = df[df['CLAVE SAT'].astype(str) != "60141000"]
@@ -194,17 +221,16 @@ def procesar_inventario(df_reporte, df_precios, incluir_infantiles=False, inclui
         df = df[df['SUCURSAL'].astype(str).str.upper().isin(sucursales_upper)]
         
     if categoria != "TODAS":
-        # Simplified category logic - assumes category is part of the description or base model
-        # You might need to adjust this depending on how categories are actually defined in your data
-        pass # Placeholder: Implement specific category logic if needed. Currently rely on models
+        pass
         
     if modelos and "TODOS" not in [str(m).upper() for m in modelos]:
         modelos_upper = [str(m).upper() for m in modelos]
         df = df[df['MODELO BASE'].astype(str).str.upper().isin(modelos_upper)]
 
-    df = df[pd.notna(df['D1'])]
+    # 5. Limpieza final y cálculos matemáticos (vectorizados)
+    df = df.dropna(subset=['D1'])
     df = df[df['D1'].astype(str).str.strip() != ""]
-    df = df[pd.notna(df['CLAVE SAT'])]
+    df = df.dropna(subset=['CLAVE SAT'])
     
     df['CANTIDAD'] = 1
     df['D1'] = pd.to_numeric(df['D1'], errors='coerce')
@@ -212,87 +238,88 @@ def procesar_inventario(df_reporte, df_precios, incluir_infantiles=False, inclui
     df['SUBTOTAL'] = df['CANTIDAD'] * df['P. UNITARIO']
     df['IVA'] = df['SUBTOTAL'] * 0.16
     df['TOTAL'] = df['SUBTOTAL'] + df['IVA']
+
     return df
 
-def seleccionar_articulos(df_disponibles, monto_objetivo):
-    
-    mejor_diferencia = float('inf')
-    mejor_combinacion = []
-    
-    items = df_disponibles.to_dict('records')
-    if not items:
+def seleccionar_articulos(df_disponibles: pd.DataFrame, monto_objetivo: float) -> pd.DataFrame:
+    if df_disponibles.empty:
         return pd.DataFrame()
 
-    # 1. Greedy Aleatorizado con Refinamiento (Local Search)
-    # Hacemos 800 iteraciones para garantizar variedad, pero en cada una aplicamos "relleno fino"
-    for _ in range(800):
-        # Revolver el inventario completamente (mantiene la variedad y no repite modelos)
-        random.shuffle(items)
+    # Extraemos solo los valores necesarios a arrays de numpy para iteración ultrarrápida
+    # Preservamos los índices originales para reconstruir el DataFrame al final
+    indices = df_disponibles.index.to_numpy()
+    totales = df_disponibles['TOTAL'].to_numpy()
+    num_items = len(totales)
+    
+    mejor_diferencia = float('inf')
+    mejor_seleccion_indices = []
+    
+    # Reducimos iteraciones a 400 (suficiente para variedad dado que numpy es rápido
+    # pero queremos evitar ciclos CPU excesivos). La aleatoriedad está garantizada.
+    iteraciones = min(400, max(50, num_items * 2))
+
+    for _ in range(iteraciones):
+        # Barajamos un array de índices aleatorios
+        orden = np.random.permutation(num_items)
+        totales_shuffled = totales[orden]
+        indices_shuffled = indices[orden]
         
-        suma_actual = 0
-        seleccion_actual = []
-        
-        # Fase 1: Llenado Greedy Aleatorio (hasta llegar o pasarse muy poquito)
-        idx_corte = 0
-        for i, item in enumerate(items):
-            if suma_actual + item['TOTAL'] <= monto_objetivo + 100: # Tolerancia inicial amplia
-                seleccion_actual.append(item)
-                suma_actual += item['TOTAL']
-            elif suma_actual > monto_objetivo:
-                idx_corte = i
-                break
+        # Suma acumulada rápida
+        cumsum = np.cumsum(totales_shuffled)
+
+        # Encontramos dónde cortamos (Greedy phase)
+        # Buscamos el último elemento donde la suma es <= monto_objetivo + 100
+        corte_idx = np.searchsorted(cumsum, monto_objetivo + 100, side='right')
+
+        if corte_idx == 0:
+            continue
+
+        seleccion_actual_idx = list(indices_shuffled[:corte_idx])
+        suma_actual = cumsum[corte_idx - 1]
 
         diferencia_inicial = abs(monto_objetivo - suma_actual)
 
-        # Fase 2: Refinamiento Fino (Tratar de buscar la pieza exacta en lo que sobró del inventario)
-        # Si no le atinamos exacto, intentamos agregar UNA pieza más de las sobrantes que encaje perfecto
-        if diferencia_inicial > 0.01 and idx_corte < len(items):
+        # Fase 2: Local Search / Refinamiento Fino
+        if diferencia_inicial > 0.01 and corte_idx < num_items:
             faltante = monto_objetivo - suma_actual
 
-            # Buscar en los que sobraron (items[idx_corte:]) el que más se acerque al faltante sin pasarse por mucho
-            mejor_pieza_relleno = None
-            mejor_diff_relleno = diferencia_inicial
+            # Buscar en los restantes
+            sobrantes = totales_shuffled[corte_idx:]
+            sobrantes_indices = indices_shuffled[corte_idx:]
 
-            for j in range(idx_corte, len(items)):
-                item_relleno = items[j]
-                nueva_suma = suma_actual + item_relleno['TOTAL']
-                nueva_diff = abs(monto_objetivo - nueva_suma)
+            # Calculamos las diferencias de añadir cada pieza sobrante
+            diferencias_relleno = np.abs(monto_objetivo - (suma_actual + sobrantes))
 
-                # Si agregar esta pieza nos acerca más al objetivo que como estábamos antes
-                if nueva_diff < mejor_diff_relleno:
-                    mejor_diff_relleno = nueva_diff
-                    mejor_pieza_relleno = item_relleno
+            # Encontramos la mejor mejora
+            mejor_relleno_idx = np.argmin(diferencias_relleno)
+            mejor_diff_relleno = diferencias_relleno[mejor_relleno_idx]
 
-                    if nueva_diff < 0.01: # Encontramos la pieza exacta
-                        break
+            if mejor_diff_relleno < diferencia_inicial:
+                seleccion_actual_idx.append(sobrantes_indices[mejor_relleno_idx])
+                suma_actual += sobrantes[mejor_relleno_idx]
+                diferencia_final = mejor_diff_relleno
+            else:
+                diferencia_final = diferencia_inicial
+        else:
+            diferencia_final = diferencia_inicial
 
-            if mejor_pieza_relleno:
-                seleccion_actual.append(mejor_pieza_relleno)
-                suma_actual += mejor_pieza_relleno['TOTAL']
-                
-        diferencia_final = abs(monto_objetivo - suma_actual)
-        
-        # Guardamos la mejor combinación histórica
+        # Evaluar la solución global
         if diferencia_final < mejor_diferencia:
             mejor_diferencia = diferencia_final
-            mejor_combinacion = list(seleccion_actual)
-        # En caso de empate (misma diferencia), preferimos la que involucre MÁS piezas (mayor volumen movido)
-        elif abs(diferencia_final - mejor_diferencia) < 0.01 and len(seleccion_actual) > len(mejor_combinacion):
-            mejor_combinacion = list(seleccion_actual)
+            mejor_seleccion_indices = seleccion_actual_idx
+        elif abs(diferencia_final - mejor_diferencia) < 0.01 and len(seleccion_actual_idx) > len(mejor_seleccion_indices):
+            mejor_seleccion_indices = seleccion_actual_idx
             
-        # Si logramos el objetivo matemático exacto (o a centavos), podemos terminar temprano
         if mejor_diferencia < 0.01:
             break
             
-    # Finalmente, para mantener consistencia en la visualización,
-    # ordenamos la combinacion ganadora antes de devolverla
-    df_resultado = pd.DataFrame(mejor_combinacion)
+    df_resultado = df_disponibles.loc[mejor_seleccion_indices].copy()
     if not df_resultado.empty:
         df_resultado = df_resultado.sort_values(by=['SUCURSAL', 'MODELO BASE', 'No de SERIE:'])
         
     return df_resultado
 
-def generar_machote(df_seleccion, monto_objetivo, empresa, rfc, cuenta_mp):
+def generar_machote(df_seleccion: pd.DataFrame, monto_objetivo: float, empresa: str, rfc: str, cuenta_mp: str) -> Tuple[str, str]:
     if not os.path.exists(config.OUTPUT_DIR):
         os.makedirs(config.OUTPUT_DIR)
         
@@ -378,7 +405,7 @@ def generar_machote(df_seleccion, monto_objetivo, empresa, rfc, cuenta_mp):
     return ruta_salida, nombre_archivo
 
 
-def _guardar_warnings_pdf(ruta_pdf, warnings):
+def _guardar_warnings_pdf(ruta_pdf: str, warnings: List[str]) -> None:
     if not warnings:
         return
     os.makedirs(config.APP_DATA_DIR, exist_ok=True)
@@ -389,7 +416,7 @@ def _guardar_warnings_pdf(ruta_pdf, warnings):
             fh.write(f"- {warning}\n")
 
 
-def extraer_nuevos_articulos_excel(ruta_excel, with_report=False):
+def extraer_nuevos_articulos_excel(ruta_excel: str, with_report: bool = False) -> Any:
 
     articulos_encontrados = []
     warnings = []
@@ -463,7 +490,7 @@ def extraer_nuevos_articulos_excel(ruta_excel, with_report=False):
     return articulos_encontrados
 
 
-def extraer_nuevos_articulos(ruta_pdf, with_report=False):
+def extraer_nuevos_articulos(ruta_pdf: str, with_report: bool = False) -> Any:
     
     match = re.search(r"reporte-productos (.+)\.pdf", os.path.basename(ruta_pdf), re.IGNORECASE)
     sucursal = match.group(1).strip() if match else "ALMACEN"
@@ -547,7 +574,7 @@ def extraer_nuevos_articulos(ruta_pdf, with_report=False):
     return articulos_encontrados
 
 
-def cargar_inventario(ruta_pdf, path_inventario, lista_articulos=None):
+def cargar_inventario(ruta_pdf: str, path_inventario: str, lista_articulos: Optional[List[Dict[str, Any]]] = None) -> str:
     
     print(f"Leyendo PDF de carga: {ruta_pdf}")
     if lista_articulos is not None:
@@ -634,8 +661,9 @@ def cargar_inventario(ruta_pdf, path_inventario, lista_articulos=None):
     
     path_salida = path_inventario # Ya no generamos _CARGADO temporalmente aquí
     print(f"Nuevos artículos insertados en base de datos. (Inventario Excel se actualizará bajo demanda).")
+    return path_salida
 
-def procesar_xmls(xml_dir):
+def procesar_xmls(xml_dir: str) -> Dict[str, str]:
     
     archivos_xml = glob.glob(os.path.join(xml_dir, "*.xml"))
     if not archivos_xml:
@@ -687,7 +715,7 @@ def procesar_xmls(xml_dir):
     print(f"Se encontraron {len(series_uuid)} series a buscar en los XMLs proporcionados.")
     return series_uuid
     
-def actualizar_inventario_uuid(xml_dir, path_inventario):
+def actualizar_inventario_uuid(xml_dir: str, path_inventario: str) -> Tuple[List[str], str]:
     series_a_buscar = procesar_xmls(xml_dir)
     if not series_a_buscar:
         print("No hay UUIDs/series para actualizar.")
@@ -698,13 +726,13 @@ def actualizar_inventario_uuid(xml_dir, path_inventario):
     print("Inventario SQLite actualizado con UUIDs.")
     return list(series_a_buscar.keys()), path_inventario
 
-def actualizar_inventario_base(df_seleccion, nombre_machote):
+def actualizar_inventario_base(df_seleccion: pd.DataFrame, nombre_machote: str) -> str:
     print("Actualizando SQLite Inventario...")
     series_usadas = df_seleccion['No de SERIE:'].tolist()
     db_manager.mark_items_as_used(series_usadas, nombre_machote)
     return config.PATH_INVENTARIO
 
-def importar_machote_externo(ruta_machote):
+def importar_machote_externo(ruta_machote: str) -> Tuple[List[str], int]:
 
     print(f"Importando machote externo desde: {ruta_machote}")
     df_externo = pd.read_excel(ruta_machote, header=None)
@@ -769,13 +797,7 @@ def importar_machote_externo(ruta_machote):
     return list(series_coincidentes), len(series_encontradas)
 
 
-def _replace_inventory_file(nuevo_path, path_inventario=config.PATH_INVENTARIO):
-    # This function is no longer actively replacing Excel files as SQLite is the source of truth,
-    # but it remains as a no-op placeholder for any legacy imports.
-    return path_inventario
-
-
-def deshacer_machote(nombre_machote):
+def deshacer_machote(nombre_machote: str) -> bool:
 
     print(f"Deshaciendo machote en SQLite: {nombre_machote}")
 
@@ -809,7 +831,7 @@ def deshacer_machote(nombre_machote):
     print("Machote deshecho exitosamente en SQLite.")
     return True
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--monto", type=float, required=False)
     parser.add_argument("--empresa", type=str, default="MOVILIDAD ELECTRICA DE JALISCO")
@@ -849,25 +871,18 @@ if __name__ == '__main__':
     main()
 
 
-def _replace_inventory_file(nuevo_path, path_inventario=config.PATH_INVENTARIO):
-    shutil = __import__("shutil")
-    if not os.path.exists(nuevo_path):
-        raise FileNotFoundError(f"No se encontró el archivo actualizado: {nuevo_path}")
-    shutil.move(nuevo_path, path_inventario)
-    return path_inventario
-
-
-def generar_machote_y_actualizar(df_seleccion, monto_objetivo, empresa, rfc, cuenta_mp):
+def generar_machote_y_actualizar(df_seleccion: pd.DataFrame, monto_objetivo: float, empresa: str, rfc: str, cuenta_mp: str) -> Tuple[str, str, None]:
     ruta_machote, nombre_machote = generar_machote(df_seleccion, monto_objetivo, empresa, rfc, cuenta_mp)
     actualizar_inventario_base(df_seleccion, nombre_machote)
-    return ruta_machote, nombre_machote, config.PATH_INVENTARIO
+    # Devolvemos un 3er elemento None por compatibilidad con firmas antiguas
+    return ruta_machote, nombre_machote, None
 
 
-def cargar_inventario_y_reemplazar(ruta_pdf, path_inventario=config.PATH_INVENTARIO, lista_articulos=None):
+def cargar_inventario_y_reemplazar(ruta_pdf: str, path_inventario: str = config.PATH_INVENTARIO, lista_articulos: Optional[List[Dict[str, Any]]] = None) -> None:
     cargar_inventario(ruta_pdf, path_inventario, lista_articulos=lista_articulos)
-    return path_inventario
+    return None
 
 
-def validar_xml_y_reemplazar(xml_dir, path_inventario=config.PATH_INVENTARIO):
+def validar_xml_y_reemplazar(xml_dir: str, path_inventario: str = config.PATH_INVENTARIO) -> Tuple[None, List[str]]:
     series_actualizadas, _ = actualizar_inventario_uuid(xml_dir, path_inventario)
-    return path_inventario, series_actualizadas
+    return None, series_actualizadas
