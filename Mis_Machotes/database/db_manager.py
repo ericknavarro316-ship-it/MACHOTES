@@ -312,15 +312,15 @@ def mark_items_as_xml(series_uuid_dict):
     conn = get_connection()
     cursor = conn.cursor()
 
-    updated_total = 0
     try:
-        for serie, uuid in series_uuid_dict.items():
-            cursor.execute('''
-            UPDATE inventario
-            SET estado = 'XML', uuid = ?
-            WHERE no_serie = ? AND (estado = 'USADO' OR estado = 'DISPONIBLE')
-            ''', (uuid, serie))
-            updated_total += cursor.rowcount
+        # Convert dict to list of tuples (uuid, no_serie) for executemany
+        params = [(uuid, serie) for serie, uuid in series_uuid_dict.items()]
+        cursor.executemany('''
+        UPDATE inventario
+        SET estado = 'XML', uuid = ?
+        WHERE no_serie = ? AND (estado = 'USADO' OR estado = 'DISPONIBLE')
+        ''', params)
+        updated_total = cursor.rowcount
         conn.commit()
     except Exception as e:
         conn.rollback()
