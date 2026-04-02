@@ -10,7 +10,7 @@ from unittest.mock import patch, MagicMock
 # Wait, if `pandas` is not available at all, `import pandas` inside `machote_generator` will fail.
 # Let's mock the ones that are causing ModuleNotFoundError gently.
 
-for mod in ['pdfplumber', 'fitz', 'openpyxl', 'openpyxl.styles', 'plyer']:
+for mod in ['pdfplumber', 'fitz', 'openpyxl', 'openpyxl.styles', 'plyer', 'numpy', 'defusedxml', 'defusedxml.ElementTree']:
     if mod not in sys.modules:
         sys.modules[mod] = MagicMock()
 
