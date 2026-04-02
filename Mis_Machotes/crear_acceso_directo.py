@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import os
 import sys
+import subprocess
 from pathlib import Path
 
 def create_desktop_shortcut():
@@ -26,7 +27,7 @@ WScript.Echo sLinkFile
         try:
             vbs_script.write_text(vbs_content, encoding="utf-8")
             print("Ejecutando script de acceso directo...")
-            os.system(f'cscript //nologo "{vbs_script}"')
+            subprocess.run(["cscript", "//nologo", str(vbs_script)], check=True)
             vbs_script.unlink()
             print(f"Acceso directo creado exitosamente en tu Escritorio de Windows.")
         except Exception as e:
