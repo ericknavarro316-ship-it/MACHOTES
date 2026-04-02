@@ -212,34 +212,35 @@ def insert_new_items(articulos):
     conn = get_connection()
     cursor = conn.cursor()
 
-    inserted = 0
     try:
-        for art in articulos:
-            try:
-                cursor.execute('''
-                INSERT INTO inventario
-                (estado, sucursal, modelo, modelo_base, color, cantidad, no_serie,
-                 d1, p_unitario, subtotal, iva, total, clave_sat, descripcion)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (
-                    'DISPONIBLE',
-                    art.get('SUCURSAL', ''),
-                    art.get('MODELO BASE', ''), # modelo = modelo_base por defecto
-                    art.get('MODELO BASE', ''),
-                    art.get('COLOR', ''),
-                    1,
-                    str(art.get('No de SERIE:', '')).strip(),
-                    art.get('D1', None),
-                    art.get('P. UNITARIO', None),
-                    art.get('SUBTOTAL', None),
-                    art.get('IVA', None),
-                    art.get('TOTAL', None),
-                    art.get('CLAVE SAT', None),
-                    art.get('DESCRIPCION', '')
-                ))
-                inserted += 1
-            except sqlite3.IntegrityError:
-                print(f"Serie duplicada ignorada: {art.get('No de SERIE:')}")
+        data = [
+            (
+                'DISPONIBLE',
+                art.get('SUCURSAL', ''),
+                art.get('MODELO BASE', ''), # modelo = modelo_base por defecto
+                art.get('MODELO BASE', ''),
+                art.get('COLOR', ''),
+                1,
+                str(art.get('No de SERIE:', '')).strip(),
+                art.get('D1', None),
+                art.get('P. UNITARIO', None),
+                art.get('SUBTOTAL', None),
+                art.get('IVA', None),
+                art.get('TOTAL', None),
+                art.get('CLAVE SAT', None),
+                art.get('DESCRIPCION', '')
+            )
+            for art in articulos
+        ]
+
+        cursor.executemany('''
+        INSERT OR IGNORE INTO inventario
+        (estado, sucursal, modelo, modelo_base, color, cantidad, no_serie,
+         d1, p_unitario, subtotal, iva, total, clave_sat, descripcion)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', data)
+
+        inserted = max(0, cursor.rowcount)
         conn.commit()
     except Exception as e:
         conn.rollback()
@@ -312,15 +313,16 @@ def mark_items_as_xml(series_uuid_dict):
     conn = get_connection()
     cursor = conn.cursor()
 
-    updated_total = 0
     try:
-        for serie, uuid in series_uuid_dict.items():
-            cursor.execute('''
-            UPDATE inventario
-            SET estado = 'XML', uuid = ?
-            WHERE no_serie = ? AND (estado = 'USADO' OR estado = 'DISPONIBLE')
-            ''', (uuid, serie))
-            updated_total += cursor.rowcount
+        data = [(uuid, serie) for serie, uuid in series_uuid_dict.items()]
+
+        cursor.executemany('''
+        UPDATE inventario
+        SET estado = 'XML', uuid = ?
+        WHERE no_serie = ? AND (estado = 'USADO' OR estado = 'DISPONIBLE')
+        ''', data)
+
+        updated_total = max(0, cursor.rowcount)
         conn.commit()
     except Exception as e:
         conn.rollback()
