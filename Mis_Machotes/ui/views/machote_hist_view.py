@@ -1,3 +1,7 @@
+import os
+import platform
+import subprocess
+import traceback
 import customtkinter as ctk
 from tkinter import messagebox
 import machote_generator as mg
@@ -88,7 +92,6 @@ class MachoteHistoryView(BaseView):
             elif entry.get("type") == "machote_externo":
                 archivo = details.get("archivo", "")
 
-            import os
             self.tree.insert("", "end", iid=str(idx), values=(entry.get("timestamp", ""), os.path.basename(archivo)))
 
         # Reset right panel
@@ -113,7 +116,6 @@ class MachoteHistoryView(BaseView):
         entry = machotes[idx]
         details = entry.get("details", {})
 
-        import os
         filename = os.path.basename(details.get("archivo", "Desconocido"))
 
         self.lbl_title.configure(text=filename)
@@ -166,7 +168,6 @@ class MachoteHistoryView(BaseView):
             messagebox.showwarning("Aviso", "Selecciona un machote de la lista para deshacer.")
             return
 
-        import os
         filename = os.path.basename(archivo)
 
         history_entry = next((m for m in self.app.app_state.history if m.get("details", {}).get("archivo") == archivo), None)
@@ -207,7 +208,6 @@ class MachoteHistoryView(BaseView):
             messagebox.showwarning("Sin efecto", f"No se encontraron piezas en el inventario actual asignadas al machote '{db_machote_name}'.")
 
     def _undo_error(self, exc):
-        import traceback
         self.app.log(f"Error deshaciendo machote:\n{traceback.format_exc()}")
         messagebox.showerror("Error", f"No se pudo deshacer el machote.\n\n{exc}")
 
@@ -217,22 +217,19 @@ class MachoteHistoryView(BaseView):
             messagebox.showwarning("Aviso", "Selecciona un machote de la lista para abrir.")
             return
 
-        import os
-        import platform
-        import subprocess
-
         if not os.path.exists(archivo):
             messagebox.showerror("Archivo no encontrado", f"El archivo ya no existe en la ruta:\n{archivo}")
             return
 
         try:
+            archivo_abs = os.path.abspath(archivo)
             if platform.system() == 'Windows':
-                os.startfile(archivo)
+                os.startfile(archivo_abs)
             elif platform.system() == 'Darwin':
-                subprocess.call(('open', archivo))
+                subprocess.run(['open', '--', archivo_abs], check=True)
             else:
-                subprocess.call(('xdg-open', archivo))
-            self.app.log(f"Archivo abierto: {archivo}")
+                subprocess.run(['xdg-open', archivo_abs], check=True)
+            self.app.log(f"Archivo abierto: {archivo_abs}")
         except Exception as exc:
             self.app.log(f"Error abriendo archivo {archivo}: {exc}")
             messagebox.showerror("Error", f"No se pudo abrir el archivo:\n{exc}")
@@ -243,7 +240,6 @@ class MachoteHistoryView(BaseView):
             messagebox.showwarning("Aviso", "Selecciona un machote de la lista para exportar.")
             return
 
-        import os
         filename = os.path.basename(archivo)
 
         selected = self.tree.selection()
@@ -298,25 +294,21 @@ class MachoteHistoryView(BaseView):
                 export_machote_pdf(pdf_path, filename, empresa, rfc, fecha, items, self.app)
                 self.app.after(0, lambda: self._pdf_success(pdf_path))
             except Exception as e:
-                import traceback
                 self.app.log(f"Error exportando PDF:\n{traceback.format_exc()}")
                 self.app.after(0, lambda: messagebox.showerror("Error", f"No se pudo exportar el PDF:\n{e}"))
 
         self.app.run_in_thread(_task)
 
     def _pdf_success(self, pdf_path):
-        import platform
-        import subprocess
-        import os
-
         self.app.log(f"PDF exportado exitosamente a: {pdf_path}")
         if messagebox.askyesno("Éxito", "PDF exportado correctamente.\n¿Deseas abrirlo ahora?"):
             try:
+                pdf_abs = os.path.abspath(pdf_path)
                 if platform.system() == 'Windows':
-                    os.startfile(pdf_path)
+                    os.startfile(pdf_abs)
                 elif platform.system() == 'Darwin':
-                    subprocess.call(('open', pdf_path))
+                    subprocess.run(['open', '--', pdf_abs], check=True)
                 else:
-                    subprocess.call(('xdg-open', pdf_path))
+                    subprocess.run(['xdg-open', pdf_abs], check=True)
             except Exception as exc:
                 self.app.log(f"Error abriendo PDF {pdf_path}: {exc}")
