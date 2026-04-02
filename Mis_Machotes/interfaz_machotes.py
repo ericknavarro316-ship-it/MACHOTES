@@ -1,9 +1,8 @@
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
+from tkinter import messagebox, filedialog
 import os
 import sys
 import threading
-import io
 
 directorio_actual = os.path.dirname(os.path.abspath(__file__))
 os.chdir(directorio_actual)
