@@ -199,7 +199,7 @@ class MachoteHistoryView(BaseView):
     def _undo_success(self, success, db_machote_name):
         if success:
             self.app.app_state.record_event("machote_undo", f"Machote deshecho: {db_machote_name}")
-            self.app.refresh_data(force=True)
+            self.app.refresh_data_async(force=True)
             self.refresh()
             self.app.log(f"Machote deshecho exitosamente: {db_machote_name}")
             messagebox.showinfo("Machote Deshecho", f"El machote '{db_machote_name}' ha sido deshecho.\nLas piezas regresaron a DISPONIBLES.")

@@ -175,7 +175,7 @@ class XMLView(BaseView):
             self.app.app_state.history.remove(entry)
             self.app.app_state.save_history()
 
-            self.app.refresh_data(force=True)
+            self.app.refresh_data_async(force=True)
             self.app.history_view.refresh()
             self.refresh()
             self.reset_workspace()
@@ -232,7 +232,7 @@ class XMLView(BaseView):
             "inventario": output_path,
             "series_actualizadas": series_actualizadas
         })
-        self.app.refresh_data(force=True)
+        self.app.refresh_data_async(force=True)
         self.app.history_view.refresh()
         self.refresh()
         self.reset_workspace()

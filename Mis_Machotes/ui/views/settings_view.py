@@ -116,7 +116,7 @@ class SettingsView(BaseView):
             self.app.app_state.history = []
             self.app.app_state.save_history()
 
-            self.app.refresh_data(force=True)
+            self.app.refresh_data_async(force=True)
             self.app.log("El Reino ha renacido. Base de datos reseteada con éxito.")
             messagebox.showinfo("Reinicio Exitoso", "El inventario ha sido borrado por completo.\nPuedes empezar a cargar PDFs desde cero.")
 

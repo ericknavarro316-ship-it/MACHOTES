@@ -344,7 +344,7 @@ class GeneratorView(BaseView):
                 "piezas": len(self.preview_df),
             },
         )
-        self.app.refresh_data(force=True)
+        self.app.refresh_data_async(force=True)
         self.app.history_view.refresh()
         self.app.log(f"Machote exportado: {file_name}")
         messagebox.showinfo("Machote creado", f"Se generó correctamente en:\n\n{route}\n\nInventario DB actualizado.")
@@ -384,7 +384,7 @@ class GeneratorView(BaseView):
                 f"Machote externo importado: {filename}",
                 {"archivo": file_path, "series_detectadas": detectadas, "series_coincidentes": len(coincidentes)}
             )
-            self.app.refresh_data(force=True)
+            self.app.refresh_data_async(force=True)
             self.app.history_view.refresh()
             self.preview_label.configure(text=f"Importado: {len(coincidentes)}/{detectadas} series coinciden.", text_color=CURRENT_THEME["emerald"])
             self.app.log(f"Importación de machote externo exitosa. {len(coincidentes)} series marcadas como usadas.")
