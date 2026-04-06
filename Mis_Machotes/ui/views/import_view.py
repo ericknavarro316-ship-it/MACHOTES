@@ -292,7 +292,7 @@ class ImportView(BaseView):
             self.app.app_state.history.remove(entry)
             self.app.app_state.save_history()
 
-            self.app.refresh_data(force=True)
+            self.app.refresh_data_async(force=True)
             self.app.history_view.refresh()
             self.refresh()
             self.reset_workspace()
@@ -438,7 +438,7 @@ class ImportView(BaseView):
             f"Mercancía importada ({len(selected_items)} piezas)",
             {"pdfs": pdf_paths, "inventario": output_path, "series_importadas": series_importadas},
         )
-        self.app.refresh_data(force=True)
+        self.app.refresh_data_async(force=True)
         self.app.history_view.refresh()
         self.refresh()
         self.reset_workspace()

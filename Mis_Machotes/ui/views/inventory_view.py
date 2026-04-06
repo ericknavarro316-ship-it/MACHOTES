@@ -43,7 +43,7 @@ class InventoryView(BaseView):
 
         ctk.CTkButton(btn_container, text="Exportar Vista Actual", width=150, fg_color=CURRENT_THEME["emerald"], hover_color=CURRENT_THEME["forest_hover"], command=self.export_view).pack(side="left", padx=(0, 10))
         ctk.CTkButton(btn_container, text="Exportar Excel Completo", width=170, fg_color=CURRENT_THEME["gold"], hover_color=CURRENT_THEME["gold_hover"], text_color="#221A0C", command=self.export_full_excel).pack(side="left", padx=(0, 10))
-        ctk.CTkButton(btn_container, text="Recargar DB", width=100, fg_color=CURRENT_THEME["forest"], hover_color=CURRENT_THEME["forest_hover"], command=lambda: self.app.refresh_data(force=True)).pack(side="left")
+        ctk.CTkButton(btn_container, text="Recargar DB", width=100, fg_color=CURRENT_THEME["forest"], hover_color=CURRENT_THEME["forest_hover"], command=lambda: self.app.refresh_data_async(force=True)).pack(side="left")
 
         totals_frame = ctk.CTkFrame(self, fg_color=CURRENT_THEME["panel_alt"], corner_radius=8)
         totals_frame.grid(row=3, column=0, sticky="ew", padx=18)
