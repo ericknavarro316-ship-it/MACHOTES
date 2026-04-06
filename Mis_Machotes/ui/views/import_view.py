@@ -421,6 +421,7 @@ class ImportView(BaseView):
         if inventory and inventory.get("precios") is not None and not inventory["precios"].empty:
             df_precios_dict = inventory["precios"].drop_duplicates(subset=['MODELO'], keep='last').set_index('MODELO').to_dict('index')
 
+        precio_col = self.app.app_state.config.get("columna_precio_default", "D1")
         missing_price_models = set()
         for item in selected_items:
             modelo = str(item.get("MODELO BASE", "")).strip().upper()
@@ -428,7 +429,8 @@ class ImportView(BaseView):
             if mapped_modelo not in df_precios_dict:
                 missing_price_models.add(mapped_modelo)
             else:
-                price = df_precios_dict[mapped_modelo].get("D1")
+                # Intenta buscar la columna configurada, si no está asume que no hay precio
+                price = df_precios_dict[mapped_modelo].get(precio_col, df_precios_dict[mapped_modelo].get("D1"))
                 if pd.isna(price) or not str(price).strip():
                     missing_price_models.add(mapped_modelo)
 
@@ -436,7 +438,7 @@ class ImportView(BaseView):
             models_str = "\n".join([f"- {m}" for m in missing_price_models])
             proceed = messagebox.askyesno(
                 "Modelos sin precio detectados",
-                f"Se han detectado los siguientes modelos en tu importación que NO tienen precio (D1) en tu Lista de Precios Excel actual:\n\n{models_str}\n\nSi continuas, se importarán con precio 0.\n(Recuerda que con el sistema de Precios Dinámicos puedes arreglar tu Excel más tarde y los precios se actualizarán solos en la Forja).\n\n¿Deseas continuar con la importación?",
+                f"Se han detectado los siguientes modelos en tu importación que NO tienen precio (columna {precio_col}) en tu Lista de Precios Excel actual:\n\n{models_str}\n\nSi continuas, se importarán con precio 0.\n(Recuerda que con el sistema de Precios Dinámicos puedes arreglar tu Excel más tarde y los precios se actualizarán solos en la Forja).\n\n¿Deseas continuar con la importación?",
                 icon="warning"
             )
             if not proceed:

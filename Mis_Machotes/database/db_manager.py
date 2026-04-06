@@ -190,6 +190,11 @@ def get_inventory_dataframes():
     df_xml = df_xml.rename(columns=reverse_mapping)
 
     from core import config
+    from core.state import AppState
+
+    app_state = AppState()
+    precio_col = app_state.config.get("columna_precio_default", "D1")
+
     df_precios = get_precios_dataframe(config.PATH_PRECIOS)
     if not df_precios.empty:
         df_precios_dict = df_precios.drop_duplicates(subset=['MODELO'], keep='last').set_index('MODELO').to_dict('index')
@@ -199,7 +204,10 @@ def get_inventory_dataframes():
 
         for df in (df_rep, df_us, df_xml):
             if df.empty:
-                df['D1'] = pd.Series(dtype=float)
+                df[precio_col] = pd.Series(dtype=float)
+                # Conservar retrocompatibilidad de columnas si D1 no es la elegida
+                if precio_col != 'D1':
+                    df['D1'] = pd.Series(dtype=float)
                 df['CLAVE SAT'] = pd.Series(dtype=str)
                 df['DESCRIPCION'] = pd.Series(dtype=str)
                 df['CANTIDAD'] = pd.Series(dtype=int)
@@ -220,7 +228,8 @@ def get_inventory_dataframes():
             for mod in modelos_mapped:
                 if mod in df_precios_dict:
                     datos = df_precios_dict[mod]
-                    d1_values.append(datos.get('D1'))
+                    # Attempt to get the configured price column, fallback to D1 if not found
+                    d1_values.append(datos.get(precio_col, datos.get('D1')))
                     clave_sat_values.append(datos.get('CLAVE SAT'))
                     desc_values.append(datos.get('DESCRIPCION'))
                 else:
@@ -228,11 +237,15 @@ def get_inventory_dataframes():
                     clave_sat_values.append(None)
                     desc_values.append(None)
 
-            df['D1'] = pd.to_numeric(d1_values, errors='coerce')
+            df[precio_col] = pd.to_numeric(d1_values, errors='coerce')
+            # Maintain D1 for backwards compatibility in UI if another column is selected
+            if precio_col != 'D1':
+                df['D1'] = df[precio_col]
+
             df['CLAVE SAT'] = clave_sat_values
             df['DESCRIPCION'] = desc_values
             df['CANTIDAD'] = 1
-            df['P. UNITARIO'] = df['D1'] / 1.16
+            df['P. UNITARIO'] = df[precio_col] / 1.16
             df['SUBTOTAL'] = df['CANTIDAD'] * df['P. UNITARIO']
             df['IVA'] = df['SUBTOTAL'] * 0.16
             df['TOTAL'] = df['SUBTOTAL'] + df['IVA']
@@ -241,9 +254,19 @@ def get_inventory_dataframes():
 
 def get_precios_dataframe(path_precios):
     """Mantiene la carga de precios desde Excel porque es pequeño y manejable"""
+    from core.state import AppState
+    app_state = AppState()
+    precio_col = app_state.config.get("columna_precio_default", "D1")
+
     try:
         df_precios = pd.read_excel(path_precios, sheet_name='Para imprimir', header=2)
-        df_precios = df_precios[['CLAVE SAT', 'DESCRIPCION', 'MODELO', 'D1']]
+        cols_to_keep = ['CLAVE SAT', 'DESCRIPCION', 'MODELO']
+        if precio_col in df_precios.columns:
+            cols_to_keep.append(precio_col)
+        elif 'D1' in df_precios.columns:
+            cols_to_keep.append('D1')
+
+        df_precios = df_precios[cols_to_keep]
         df_precios.dropna(subset=['MODELO'], inplace=True)
         df_precios['MODELO'] = df_precios['MODELO'].astype(str).str.strip().str.upper()
         df_precios['CLAVE SAT'] = df_precios['CLAVE SAT'].fillna(0).astype(int).astype(str)
