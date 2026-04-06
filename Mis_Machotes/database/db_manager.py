@@ -189,6 +189,54 @@ def get_inventory_dataframes():
     df_us = df_us.rename(columns=reverse_mapping)
     df_xml = df_xml.rename(columns=reverse_mapping)
 
+    from core import config
+    df_precios = get_precios_dataframe(config.PATH_PRECIOS)
+    if not df_precios.empty:
+        df_precios_dict = df_precios.drop_duplicates(subset=['MODELO'], keep='last').set_index('MODELO').to_dict('index')
+
+        import machote_generator as mg
+        aplicar_mapeo = mg.aplicar_mapeo
+
+        for df in (df_rep, df_us, df_xml):
+            if df.empty:
+                df['D1'] = pd.Series(dtype=float)
+                df['CLAVE SAT'] = pd.Series(dtype=str)
+                df['DESCRIPCION'] = pd.Series(dtype=str)
+                df['CANTIDAD'] = pd.Series(dtype=int)
+                df['P. UNITARIO'] = pd.Series(dtype=float)
+                df['SUBTOTAL'] = pd.Series(dtype=float)
+                df['IVA'] = pd.Series(dtype=float)
+                df['TOTAL'] = pd.Series(dtype=float)
+                continue
+
+            modelos_unicos = df['MODELO BASE'].dropna().unique()
+            mapa_modelos = {m: aplicar_mapeo(m) for m in modelos_unicos}
+            modelos_mapped = df['MODELO BASE'].map(mapa_modelos).fillna(df['MODELO BASE'])
+
+            d1_values = []
+            clave_sat_values = []
+            desc_values = []
+
+            for mod in modelos_mapped:
+                if mod in df_precios_dict:
+                    datos = df_precios_dict[mod]
+                    d1_values.append(datos.get('D1'))
+                    clave_sat_values.append(datos.get('CLAVE SAT'))
+                    desc_values.append(datos.get('DESCRIPCION'))
+                else:
+                    d1_values.append(None)
+                    clave_sat_values.append(None)
+                    desc_values.append(None)
+
+            df['D1'] = pd.to_numeric(d1_values, errors='coerce')
+            df['CLAVE SAT'] = clave_sat_values
+            df['DESCRIPCION'] = desc_values
+            df['CANTIDAD'] = 1
+            df['P. UNITARIO'] = df['D1'] / 1.16
+            df['SUBTOTAL'] = df['CANTIDAD'] * df['P. UNITARIO']
+            df['IVA'] = df['SUBTOTAL'] * 0.16
+            df['TOTAL'] = df['SUBTOTAL'] + df['IVA']
+
     return df_rep, df_us, df_xml
 
 def get_precios_dataframe(path_precios):
