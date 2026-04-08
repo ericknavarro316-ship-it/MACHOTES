@@ -19,6 +19,7 @@ class SettingsView(BaseView):
             ("cuenta_default", "Cuenta por defecto"),
             ("rfc_default", "RFC por defecto"),
             ("parse_warning_threshold", "Umbral warnings (importación PDF)"),
+            ("columna_precio_default", "Columna de Precio en Excel (ej. D1, C1)"),
             ("inventario_path", "Ruta inventario (Solo Lectura - Obsoleto)"),
             ("machote_path", "Ruta plantilla machote"),
             ("precios_path", "Ruta lista de precios"),

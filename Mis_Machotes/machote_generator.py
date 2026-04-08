@@ -135,15 +135,25 @@ def load_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]
 
     df_reporte, df_usados, df_xml = db_manager.get_inventory_dataframes()
         
+    from core.state import AppState
+    app_state = AppState()
+    precio_col = app_state.config.get("columna_precio_default", "D1")
+
     if os.path.exists(config.PATH_PRECIOS):
         df_precios = pd.read_excel(config.PATH_PRECIOS, sheet_name='Para imprimir', header=2)
-        df_precios = df_precios[['CLAVE SAT', 'DESCRIPCION', 'MODELO', 'D1']]
+        cols_to_keep = ['CLAVE SAT', 'DESCRIPCION', 'MODELO']
+        if precio_col in df_precios.columns:
+            cols_to_keep.append(precio_col)
+        elif 'D1' in df_precios.columns:
+            cols_to_keep.append('D1')
+
+        df_precios = df_precios[cols_to_keep]
         df_precios.dropna(subset=['MODELO'], inplace=True)
         df_precios['MODELO'] = df_precios['MODELO'].astype(str).str.strip().str.upper()
         df_precios['CLAVE SAT'] = df_precios['CLAVE SAT'].fillna(0).astype(int).astype(str)
     else:
         print(f"Advertencia: Archivo de precios '{config.PATH_PRECIOS}' no encontrado. Precios serán $0.")
-        df_precios = pd.DataFrame(columns=['CLAVE SAT', 'DESCRIPCION', 'MODELO', 'D1'])
+        df_precios = pd.DataFrame(columns=['CLAVE SAT', 'DESCRIPCION', 'MODELO', precio_col])
     
     return df_reporte, df_usados, df_xml, df_precios
 
@@ -176,13 +186,21 @@ def procesar_inventario(
     mapa_modelos = {m: aplicar_mapeo(m) for m in modelos_unicos}
     df['MODELO_MAPPED'] = df['MODELO BASE'].map(mapa_modelos).fillna(df['MODELO BASE'])
     
+    from core.state import AppState
+    app_state = AppState()
+    precio_col = app_state.config.get("columna_precio_default", "D1")
+
+    actual_precio_col = precio_col if precio_col in df_precios.columns else 'D1'
+    if actual_precio_col not in df_precios.columns:
+        df_precios[actual_precio_col] = pd.Series(dtype=float)
+
     # Preparar df_precios
     df_precios_unicos = df_precios.drop_duplicates(subset=['MODELO'], keep='last').set_index('MODELO')
 
     # 3. Join (merge) en lugar de iterar row por row
-    # Hacemos un merge left para traer 'D1', 'CLAVE SAT' y 'DESCRIPCION' desde df_precios
+    # Hacemos un merge left para traer el precio, 'CLAVE SAT' y 'DESCRIPCION' desde df_precios
     df = df.merge(
-        df_precios_unicos[['D1', 'CLAVE SAT', 'DESCRIPCION']],
+        df_precios_unicos[[actual_precio_col, 'CLAVE SAT', 'DESCRIPCION']],
         left_on='MODELO_MAPPED',
         right_index=True,
         how='left',
@@ -190,8 +208,11 @@ def procesar_inventario(
     )
 
     # Actualizar valores si se encontraron en la tabla de precios
-    mask_found = df['D1_precio'].notna()
-    df.loc[mask_found, 'D1'] = pd.to_numeric(df.loc[mask_found, 'D1_precio'], errors='coerce')
+    precio_merge_col = f'{actual_precio_col}_precio' if f'{actual_precio_col}_precio' in df.columns else actual_precio_col
+    mask_found = df[precio_merge_col].notna()
+    df.loc[mask_found, precio_col] = pd.to_numeric(df.loc[mask_found, precio_merge_col], errors='coerce')
+    if precio_col != 'D1':
+        df['D1'] = df[precio_col] # Retrocompatibilidad
     df.loc[mask_found, 'CLAVE SAT'] = df.loc[mask_found, 'CLAVE SAT_precio'].astype(str)
 
     # Construir descripción vectorizada
@@ -209,7 +230,7 @@ def procesar_inventario(
     df.loc[mask_found, 'DESCRIPCION'] = desc_final[mask_found].str.upper()
 
     # Limpiar columnas temporales del merge
-    df = df.drop(columns=['D1_precio', 'CLAVE SAT_precio', 'DESCRIPCION_precio'], errors='ignore')
+    df = df.drop(columns=[precio_merge_col, 'CLAVE SAT_precio', 'DESCRIPCION_precio'], errors='ignore')
             
     # 4. Filtros posteriores vectorizados
     if not incluir_infantiles:
@@ -228,13 +249,13 @@ def procesar_inventario(
         df = df[df['MODELO BASE'].astype(str).str.upper().isin(modelos_upper)]
 
     # 5. Limpieza final y cálculos matemáticos (vectorizados)
-    df = df.dropna(subset=['D1'])
-    df = df[df['D1'].astype(str).str.strip() != ""]
+    df = df.dropna(subset=[precio_col])
+    df = df[df[precio_col].astype(str).str.strip() != ""]
     df = df.dropna(subset=['CLAVE SAT'])
     
     df['CANTIDAD'] = 1
-    df['D1'] = pd.to_numeric(df['D1'], errors='coerce')
-    df['P. UNITARIO'] = df['D1'] / 1.16
+    df[precio_col] = pd.to_numeric(df[precio_col], errors='coerce')
+    df['P. UNITARIO'] = df[precio_col] / 1.16
     df['SUBTOTAL'] = df['CANTIDAD'] * df['P. UNITARIO']
     df['IVA'] = df['SUBTOTAL'] * 0.16
     df['TOTAL'] = df['SUBTOTAL'] + df['IVA']
@@ -616,10 +637,14 @@ def cargar_inventario(ruta_pdf: str, path_inventario: str, lista_articulos: Opti
         clave_sat = None
         desc_base = ""
         
+        from core.state import AppState
+        app_state = AppState()
+        precio_col = app_state.config.get("columna_precio_default", "D1")
+
         if modelo_busqueda in df_precios_dict:
             datos_precio = df_precios_dict[modelo_busqueda]
             try:
-                d1_val = float(datos_precio['D1'])
+                d1_val = float(datos_precio.get(precio_col, datos_precio.get('D1')))
             except (ValueError, TypeError):
                 d1_val = None
             clave_sat = str(datos_precio['CLAVE SAT'])
@@ -633,7 +658,9 @@ def cargar_inventario(ruta_pdf: str, path_inventario: str, lista_articulos: Opti
         else:
             desc_final = f"{desc_base} {modelo_busqueda} NO DE SERIE:{serie}"
             
-        art['D1'] = d1_val
+        art[precio_col] = d1_val
+        if precio_col != 'D1':
+            art['D1'] = d1_val
         art['CLAVE SAT'] = clave_sat
         art['DESCRIPCION'] = desc_final.upper()
         
@@ -647,7 +674,7 @@ def cargar_inventario(ruta_pdf: str, path_inventario: str, lista_articulos: Opti
             art['SUBTOTAL'] = None
             art['IVA'] = None
             art['TOTAL'] = None
-            print(f"ADVERTENCIA: Modelo {modelo_busqueda} no tiene precio D1 en catálogo. Se cargará sin precio.")
+            print(f"ADVERTENCIA: Modelo {modelo_busqueda} no tiene precio {precio_col} en catálogo. Se cargará sin precio.")
             
         a_insertar.append(art)
             

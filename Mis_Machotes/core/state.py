@@ -23,6 +23,7 @@ DEFAULT_CONFIG = {
     "precios_path": str(BASE_DIR / "machotes" / "Lista de precios ok.xlsx"),
     "output_dir": str(BASE_DIR / "machotes_generados"),
     "parse_warning_threshold": 3,
+    "columna_precio_default": "D1",
 }
 
 class AppState:

@@ -415,6 +415,37 @@ class ImportView(BaseView):
                 self.app.log("Importación cancelada por usuario tras confirmación reforzada.")
                 return
 
+        # Check for models without prices
+        inventory = self.app.get_inventory_data(refresh=False)
+        df_precios_dict = {}
+        if inventory and inventory.get("precios") is not None and not inventory["precios"].empty:
+            df_precios_dict = inventory["precios"].drop_duplicates(subset=['MODELO'], keep='last').set_index('MODELO').to_dict('index')
+
+        precio_col = self.app.app_state.config.get("columna_precio_default", "D1")
+        missing_price_models = set()
+        for item in selected_items:
+            modelo = str(item.get("MODELO BASE", "")).strip().upper()
+            mapped_modelo = mg.aplicar_mapeo(modelo)
+            if mapped_modelo not in df_precios_dict:
+                missing_price_models.add(mapped_modelo)
+            else:
+                # Intenta buscar la columna configurada, si no está asume que no hay precio
+                price = df_precios_dict[mapped_modelo].get(precio_col, df_precios_dict[mapped_modelo].get("D1"))
+                if pd.isna(price) or not str(price).strip():
+                    missing_price_models.add(mapped_modelo)
+
+        if missing_price_models:
+            models_str = "\n".join([f"- {m}" for m in missing_price_models])
+            proceed = messagebox.askyesno(
+                "Modelos sin precio detectados",
+                f"Se han detectado los siguientes modelos en tu importación que NO tienen precio (columna {precio_col}) en tu Lista de Precios Excel actual:\n\n{models_str}\n\nSi continuas, se importarán con precio 0.\n(Recuerda que con el sistema de Precios Dinámicos puedes arreglar tu Excel más tarde y los precios se actualizarán solos en la Forja).\n\n¿Deseas continuar con la importación?",
+                icon="warning"
+            )
+            if not proceed:
+                self.summary_label.configure(text="Importación cancelada por falta de precios.", text_color=CURRENT_THEME["warning"])
+                self.app.log("Importación cancelada por usuario por modelos sin precio.")
+                return
+
         self.app.log("Iniciando importación en segundo plano...")
         self.summary_label.configure(text="Importando mercancía, por favor espera...", text_color=CURRENT_THEME["warning"])
         self.progress_bar.grid()
