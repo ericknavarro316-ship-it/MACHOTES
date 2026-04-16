@@ -27,6 +27,10 @@ def _es_token_color(token: Any) -> bool:
     partes = [p.strip() for p in normalizado.split("/") if p.strip()]
     if not partes:
         return False
+
+    if normalizado in config.COLORES_VALIDOS:
+        return True
+
     return all(parte in config.COLORES_VALIDOS for parte in partes)
 
 
@@ -533,20 +537,34 @@ def extraer_nuevos_articulos(ruta_pdf: str, with_report: bool = False) -> Any:
     modelo_actual = ""
     color_actual = ""
     
+    # Compile regex pattern outside loop for efficiency
+    # Make the price part optional, capturing any text before it as series
+    bloque_pattern = re.compile(r"^(.+?)\s+(\d+)\s+\(\d+\)\s+(.*?)(?:\s+\$[\d,]+\.\d{2})?$")
+
     for i in range(len(lineas)):
         linea = lineas[i].strip()
         if not linea or "Nombre" in linea or "Total de productos" in linea:
             continue
             
-        match_bloque = re.match(r"^(.+?)\s+(\d+)\s+\(\d+\)\s+([A-Z0-9, ]+)\s+\$([\d,]+\.\d{2})", linea)
+        match_bloque = bloque_pattern.match(linea)
         
         if match_bloque:
             bloques_detectados += 1
             nombre_completo = match_bloque.group(1).strip()
             partes_nombre = nombre_completo.split(" ")
             
-            ultimo_token = partes_nombre[-1].upper() if partes_nombre else ""
-            if len(partes_nombre) > 1 and _es_token_color(ultimo_token):
+            # Use combined color tokens for special compound cases like GRIS XUAN
+            if len(partes_nombre) > 1:
+                ultimo_token = partes_nombre[-1].upper()
+                ultimos_dos_tokens = f"{partes_nombre[-2].upper()} {ultimo_token}" if len(partes_nombre) >= 2 else ultimo_token
+            else:
+                ultimo_token = ""
+                ultimos_dos_tokens = ""
+
+            if len(partes_nombre) >= 2 and _es_token_color(ultimos_dos_tokens):
+                modelo_actual = " ".join(partes_nombre[:-2])
+                color_actual = ultimos_dos_tokens.replace("-", "/")
+            elif len(partes_nombre) >= 1 and _es_token_color(ultimo_token):
                 modelo_actual = " ".join(partes_nombre[:-1])
                 color_actual = ultimo_token.replace("-", "/")
             else:
@@ -556,29 +574,48 @@ def extraer_nuevos_articulos(ruta_pdf: str, with_report: bool = False) -> Any:
                     tokens = lineas[i + 1].strip().split()
                     if tokens:
                         siguiente = tokens[0]
-                        if _es_token_color(siguiente) and siguiente not in ["L1LTWT", "HWM7MTEZA", "LU5RMC"]:
+                        if len(tokens) > 1:
+                            siguientes_dos = f"{tokens[0]} {tokens[1]}"
+                        else:
+                            siguientes_dos = tokens[0]
+
+                        if _es_token_color(siguientes_dos):
+                             color_actual = siguientes_dos.upper().replace("-", "/")
+                        elif _es_token_color(siguiente) and siguiente not in ["L1LTWT", "HWM7MTEZA", "LU5RMC"]:
                             color_actual = siguiente.upper().replace("-", "/")
                     else:
                         warnings.append(f"Línea {i + 2} vacía al intentar detectar color para '{nombre_completo}'.")
             
             series_str = match_bloque.group(3).strip()
+            # Clean trailing commas
+            if series_str.endswith(","):
+                series_str = series_str[:-1]
+
             series = [s.strip() for s in series_str.split(',')]
             
             for s in series:
-                if len(s) > 5 and s not in seen_series:
+                # Ensure the string looks like a serial number and not just a price/time
+                if len(s) > 5 and s.isalnum() and s not in seen_series:
                     articulos_encontrados.append({'SUCURSAL': sucursal, 'MODELO BASE': modelo_actual, 'COLOR': color_actual, 'No de SERIE:': s, 'CANTIDAD': 1})
                     seen_series.add(s)
             
             j = i + 1
             while j < len(lineas):
                 lin_j = lineas[j].strip()
+
+                # Stop immediately if this looks like a new block definition
+                if bloque_pattern.match(lin_j):
+                    break
+
                 match_series_extra = re.findall(r"([A-Z0-9]{10,25})(?:,|$)", lin_j)
                 if match_series_extra:
                     for s in match_series_extra:
                         if len(s) > 5 and s not in seen_series:
                             articulos_encontrados.append({'SUCURSAL': sucursal, 'MODELO BASE': modelo_actual, 'COLOR': color_actual, 'No de SERIE:': s, 'CANTIDAD': 1})
                             seen_series.add(s)
-                if "$" in lin_j or re.match(r"^(.+?)\s+(\d+)\s+\(\d+\)", lin_j):
+
+                # Stop if it has a price or time pattern indicating end of block
+                if "$" in lin_j or re.match(r"^\d{2}:\d{2}:\d{2}$", lin_j):
                     break
                 j += 1
 
